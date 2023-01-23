@@ -26,11 +26,6 @@ contract TrustMe {
         address indexed buyer,
     );
 
-    event TradeCancelled(
-        bytes32 indexed tradeId,
-        address indexed seller,
-        address indexed buyer,
-    );
 
     event TradeExpired(
         bytes32 indexed tradeId,
