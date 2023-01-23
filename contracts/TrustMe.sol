@@ -7,7 +7,7 @@ import "hardhat/console.sol";
 
 
 
-contract Escrow {
+contract TrustMe {
 
     // Events
     event TradeCreated(
@@ -40,7 +40,7 @@ contract Escrow {
 
     // State Variables
 
-    enum TradeStatus {Created, Accepted, Cancelled, Expired}
+    enum TradeStatus {Pending, Accepted, Expired}
 
     struct Trade {
         address seller;
@@ -55,34 +55,36 @@ contract Escrow {
     }
 
     mapping(bytes32 => Trade) public trades;
+    mapping(address => bytes32[]) public userTradesAsSeller;
+    mapping(address => bytes32[]) public userTradesAsBuyer;
+    mapping(address => mapping(address => uint256)) public tokenAllowance;
+
     bytes32 public tradeId;
 
 
     // Modifiers
 
-    modifier onlyValidUser() {
-        require(msg.sender != address(0), "Invalid user");
+    modifier onlyValidTrade(address _buyer, address _tokenToSell, address _tokenToBuy) {
+        require(msg.sender != address(0), "Invalid address");
+        require(_buyer != address(0), "Invalid address");
+        require(_tokenToSell != address(0), "Invalid token address");
+        require(_tokenToBuy != address(0), "Invalid token address");
         _;
     }
 
   function createTrade(
-        address _seller,
         address _buyer,
         address _tokenToSell,
         address _tokenToBuy,
         uint256 _amountOfTokenToSell,
         uint256 _amountOfTokenToBuy,
         uint256 _deadline
-    ) public onlyValidUser {
-        require(_tokenToSell != address(0), "Invalid token address");
-        require(_tokenToBuy != address(0), "Invalid token address");
+    ) public onlyValidTrade(_buyer, _tokenToSell, _tokenToBuy) {
         IERC20 token = IERC20(_tokenToSell);
         token.approve(address(this), _amountOfTokenToSell);
-        token.transferFrom(_seller, address(this), _amountOfTokenToSell);
-
-        tradeId = keccak256(abi.encodePacked(block.timestamp, _seller, _buyer));
+        tradeId = keccak256(abi.encodePacked(block.timestamp, msg.sender, _buyer));
         Trade memory trade = Trade(
-            _seller,
+            msg.sender,
             _buyer,
             _tokenToSell,
             _tokenToBuy,
@@ -90,11 +92,17 @@ contract Escrow {
             _amountOfTokenToBuy,
             tradeId,
             _deadline,
-            TradeStatus.Created
+            TradeStatus.Pending
         );
+
         trades[tradeId] = trade;
+        userTradesAsSeller[msg.sender].push(tradeId);
+        userTradesAsBuyer[_buyer].push(tradeId);
+        tokenAllowance[msg.sender][_tokenToSell] = _amountOfTokenToSell;
+
+
         emit TradeCreated(
-            _seller,
+            msg.sender,
             _buyer,
             tradeId
             _tokenToSell,
@@ -104,23 +112,23 @@ contract Escrow {
         );
     }
 
-    function acceptTrade(uint256 _tradeId) public {
-        Trade memory trade = trades[_tradeId];
-        require(trade.buyer == msg.sender, "You are not the buyer");
-        require(trade.deadline > block.timestamp, "Trade is expired");
+    // function acceptTrade(uint256 _tradeId) public {
+    //     Trade memory trade = trades[_tradeId];
+    //     require(trade.buyer == msg.sender, "You are not the buyer");
+    //     require(trade.deadline > block.timestamp, "Trade is expired");
 
-        // Approve the escrow contract to transfer the tokens
-        IERC20 _token = IERC20(trade.tokenToBuy);
-        _token.approve(address(this), trade.amountOfTokenToBuy);
+    //     // Approve the escrow contract to transfer the tokens
+    //     IERC20 _token = IERC20(trade.tokenToBuy);
+    //     _token.approve(address(this), trade.amountOfTokenToBuy);
 
-        // transfer tokens from escrow to seller
-        IERC20 token = IERC20(trade.tokenToSell);
-        token.transfer(trade.seller, trade.amountOfTokenToBuy);
+    //     // transfer tokens from escrow to seller
+    //     IERC20 token = IERC20(trade.tokenToSell);
+    //     token.transfer(trade.seller, trade.amountOfTokenToBuy);
 
-        // transfer tokens from escrow to buyer
-        token = IERC20(trade.tokenToBuy);
-        token.transfer(trade.buyer, trade.amountOfTokenToSell);
-    }
+    //     // transfer tokens from escrow to buyer
+    //     token = IERC20(trade.tokenToBuy);
+    //     token.transfer(trade.buyer, trade.amountOfTokenToSell);
+    // }
 
 
 
