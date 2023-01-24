@@ -96,5 +96,17 @@ describe('TrustMe', () => {
 				)
 			).to.be.revertedWithCustomError(trustMe, 'InvalidAmount');
 		});
+		it("Should revert if Seller doesn't have enough tokenToSell", async () => {
+			await expect(
+				trustMe.connect(seller).createTrade(
+					buyer.address,
+					sellerToken.address,
+					buyerToken.address,
+					parseEther('100000'),
+					parseEther('100'),
+					(await time.latest()) + 600 // 10 mins deadline
+				)
+			).to.be.revertedWithCustomError(trustMe, 'InsufficientBalance');
+		});
 	});
 });
