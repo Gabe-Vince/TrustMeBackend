@@ -17,7 +17,6 @@ error TradeIsExpired();
 error InsufficientAllowance();
 
 contract TrustMe {
-
 	// Events
 	event TradeCreated(
 		address indexed seller,
@@ -32,6 +31,7 @@ contract TrustMe {
 	event TradeAccepted(address indexed seller, address indexed buyer);
 
 	event TradeExpired(address indexed seller, address indexed buyer);
+
 	using SafeERC20 for IERC20;
 	// State Variables
 
@@ -73,6 +73,7 @@ contract TrustMe {
 		if (IERC20(_tokenToSell).balanceOf(msg.sender) < _amountOfTokenToSell) revert InsufficientBalance();
 		_;
 	}
+
 	modifier validateCloseTrade(address seller, uint256 index) {
 		Trade memory trade = userToTrades[seller][index];
 		if (trade.buyer != msg.sender) revert OnlyBuyer();
@@ -154,4 +155,7 @@ contract TrustMe {
 		return userToTrades[userAddress][index];
 	}
 
+	function getLatestTrade(address userAddress) external view returns (uint256) {
+		return userToTrades[userAddress].length - 1;
+	}
 }

@@ -33,10 +33,10 @@ describe('TrustMe', () => {
 		await buyerToken.transfer(buyer.address, ethers.utils.parseEther('1000'));
 	});
 
-	describe('CreateTrade', () => {
+	describe('addTrade functionality', () => {
 		it('Should revert if seller,buyer,tokenToSell,tokenToBuy address is 0x0', async () => {
 			await expect(
-				trustMe.connect(seller).createTrade(
+				trustMe.connect(seller).addTrade(
 					ethers.constants.AddressZero,
 					ethers.constants.AddressZero,
 					ethers.constants.AddressZero,
@@ -49,7 +49,7 @@ describe('TrustMe', () => {
 
 		it('Should revert if tokenToBuy is same as tokenToSell', async () => {
 			await expect(
-				trustMe.connect(seller).createTrade(
+				trustMe.connect(seller).addTrade(
 					buyer.address,
 					sellerToken.address,
 					sellerToken.address,
@@ -62,7 +62,7 @@ describe('TrustMe', () => {
 
 		it('Should revert if seller and buyer is same', async () => {
 			await expect(
-				trustMe.connect(seller).createTrade(
+				trustMe.connect(seller).addTrade(
 					seller.address,
 					sellerToken.address,
 					buyerToken.address,
@@ -74,7 +74,7 @@ describe('TrustMe', () => {
 		});
 		it('Should revert if amount of tokenToSell is 0', async () => {
 			await expect(
-				trustMe.connect(seller).createTrade(
+				trustMe.connect(seller).addTrade(
 					buyer.address,
 					sellerToken.address,
 					buyerToken.address,
@@ -86,7 +86,7 @@ describe('TrustMe', () => {
 		});
 		it('Should revert if amount of tokenToBuy is 0', async () => {
 			await expect(
-				trustMe.connect(seller).createTrade(
+				trustMe.connect(seller).addTrade(
 					buyer.address,
 					sellerToken.address,
 					buyerToken.address,
@@ -98,7 +98,7 @@ describe('TrustMe', () => {
 		});
 		it("Should revert if Seller doesn't have enough tokenToSell", async () => {
 			await expect(
-				trustMe.connect(seller).createTrade(
+				trustMe.connect(seller).addTrade(
 					buyer.address,
 					sellerToken.address,
 					buyerToken.address,
@@ -111,7 +111,7 @@ describe('TrustMe', () => {
 		it('Should emit TradeCreated event if trade is created successfully', async () => {
 			await sellerToken.connect(seller).approve(trustMe.address, parseEther('100'));
 			await expect(
-				trustMe.connect(seller).createTrade(
+				trustMe.connect(seller).addTrade(
 					buyer.address,
 					sellerToken.address,
 					buyerToken.address,
@@ -130,6 +130,84 @@ describe('TrustMe', () => {
 					parseEther('100'),
 					(await time.latest()) + 600
 				);
+		});
+
+		it('Should create trade successfully', async () => {
+			const currentTime = await time.latest();
+			await sellerToken.connect(seller).approve(trustMe.address, parseEther('100'));
+			await trustMe.connect(seller).addTrade(
+				buyer.address,
+				sellerToken.address,
+				buyerToken.address,
+				parseEther('100'),
+				parseEther('100'),
+				currentTime + 600 // 10 mins deadline
+			);
+
+			const trade = await trustMe.getTrade(seller.address, 0);
+			expect(trade.seller).to.equal(seller.address);
+			expect(trade.buyer).to.equal(buyer.address);
+			expect(trade.tokenToSell).to.equal(sellerToken.address);
+			expect(trade.tokenToBuy).to.equal(buyerToken.address);
+			expect(trade.amountOfTokenToSell).to.equal(parseEther('100'));
+			expect(trade.amountOfTokenToBuy).to.equal(parseEther('100'));
+			expect(trade.deadline).to.equal(currentTime + 600);
+		});
+	});
+
+	describe('closeTrade functionality', () => {
+		beforeEach(async () => {
+			const currentTime = await time.latest();
+			await sellerToken.connect(seller).approve(trustMe.address, parseEther('100'));
+			const addTrade = await trustMe.connect(seller).addTrade(
+				buyer.address,
+				sellerToken.address,
+				buyerToken.address,
+				parseEther('100'),
+				parseEther('100'),
+				currentTime + 600 // 10 mins deadline
+			);
+			addTrade.wait();
+		});
+
+		it('should trade between the seller and buyer', async () => {
+			const index = await trustMe.getLatestTrade(seller.address);
+			console.log('Seller Balance Before: ', (await buyerToken.balanceOf(seller.address)).toString());
+			console.log('Buyer Balance Before: ', (await sellerToken.balanceOf(buyer.address)).toString());
+			await buyerToken.connect(buyer).approve(trustMe.address, parseEther('100'));
+			const confirmTrade = await trustMe.connect(buyer).closeTrade(seller.address, index);
+			confirmTrade.wait();
+			console.log('Seller Balance After: ', (await buyerToken.balanceOf(seller.address)).toString());
+			console.log('Buyer Balance After: ', (await sellerToken.balanceOf(buyer.address)).toString());
+			expect(await sellerToken.balanceOf(buyer.address)).to.equal(parseEther('100'));
+			expect(await buyerToken.balanceOf(seller.address)).to.equal(parseEther('100'));
+		});
+
+		it('should emit TradeConfirmed event', async () => {
+			const index = await trustMe.getLatestTrade(seller.address);
+			await buyerToken.connect(buyer).approve(trustMe.address, parseEther('100'));
+			const confirmTrade = await trustMe.connect(buyer).closeTrade(seller.address, index);
+			confirmTrade.wait();
+			await expect(confirmTrade).to.emit(trustMe, 'TradeAccepted').withArgs(seller.address, buyer.address);
+		});
+
+		it('should revert if incorrect buyer', async () => {
+			const index = await trustMe.getLatestTrade(seller.address);
+			await buyerToken.connect(buyer).approve(trustMe.address, parseEther('100'));
+			expect(trustMe.connect(contractsDeployer).closeTrade(seller.address, index)).to.be.revertedWithCustomError(
+				trustMe,
+				'OnlyBuyer'
+			);
+		});
+
+		it('should revert if deadline is expired', async () => {
+			const index = await trustMe.getLatestTrade(seller.address);
+			await buyerToken.connect(buyer).approve(trustMe.address, parseEther('100'));
+			await time.increase(601);
+			expect(trustMe.connect(buyer).closeTrade(seller.address, index)).to.be.revertedWithCustomError(
+				trustMe,
+				'TradeIsExpired'
+			);
 		});
 	});
 });
