@@ -13,7 +13,8 @@
     "./test",
     "./typechain-types",
     "./hardhat.config.ts",
-    "typechain/**/*"
+    "typechain/**/*",
+    "./src"
   ],
   "files": ["./hardhat.config.ts"]
 }

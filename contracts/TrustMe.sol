@@ -17,6 +17,7 @@ error TradeIsExpired();
 error InsufficientAllowance();
 
 contract TrustMe {
+
 	// Events
 	event TradeCreated(
 		address indexed seller,
@@ -152,4 +153,5 @@ contract TrustMe {
 	function getTrade(address userAddress, uint256 index) external view returns (Trade memory) {
 		return userToTrades[userAddress][index];
 	}
+
 }
