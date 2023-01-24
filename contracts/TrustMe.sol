@@ -3,134 +3,155 @@ pragma solidity ^0.8.17;
 
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "hardhat/console.sol";
+import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 
 error InvalidAddress();
 error CannotTradeSameToken();
 error CannotTradeWithSelf();
 error DeadlineShouldBeAtLeastAMinute();
 error InvalidAmount();
+error InsufficientBalance();
+error OnlyBuyer();
+error TradeIsNotPending();
+error TradeIsExpired();
+error InsufficientAllowance();
 
 contract TrustMe {
-    // Events
-    event TradeCreated(
-        address indexed seller,
-        address indexed buyer,
-        bytes32 indexed tradeId,
-        address tokenToSell,
-        address tokenToBuy,
-        uint256 amountOfTokenToSell,
-        uint256 amountOfTokenToBuy
-    );
 
-    event TradeAccepted(
-        bytes32 indexed tradeId,
-        address indexed seller,
-        address indexed buyer
-    );
+	// Events
+	event TradeCreated(
+		address indexed seller,
+		address indexed buyer,
+		address tokenToSell,
+		address tokenToBuy,
+		uint256 amountOfTokenToSell,
+		uint256 amountOfTokenToBuy,
+		uint deadline
+	);
 
-    event TradeExpired(
-        bytes32 indexed tradeId,
-        address indexed seller,
-        address indexed buyer
-    );
+	event TradeAccepted(address indexed seller, address indexed buyer);
 
-    // State Variables
+	event TradeExpired(address indexed seller, address indexed buyer);
+	using SafeERC20 for IERC20;
+	// State Variables
 
-    enum TradeStatus {
-        Pending,
-        Accepted,
-        Expired
-    }
+	enum TradeStatus {
+		Pending,
+		Accepted,
+		Expired,
+		Canceled
+	}
 
-    struct Trade {
-        address seller;
-        address buyer;
-        address tokenToSell;
-        address tokenToBuy;
-        uint256 amountOfTokenToSell;
-        uint256 amountOfTokenToBuy;
-        bytes32 tradeId;
-        uint256 deadline;
-        TradeStatus status;
-    }
+	struct Trade {
+		address seller;
+		address buyer;
+		address tokenToSell;
+		address tokenToBuy;
+		uint256 amountOfTokenToSell;
+		uint256 amountOfTokenToBuy;
+		uint256 deadline;
+		TradeStatus status;
+	}
+	mapping(address => Trade[]) public userToTrades;
+	mapping(address => mapping(address => uint256)) public userToTokenToAmount;
 
-    mapping(bytes32 => Trade) public trades;
-    mapping(address => bytes32[]) public userToTradeIds;
-    // mapping(address => bytes32[]) public userTradesAsSeller;
-    // mapping(address => bytes32[]) public userTradesAsBuyer;
-    mapping(address => mapping(address => uint256)) public tokenAllowance; // why this?
+	modifier onlyValidTrade(
+		address _buyer,
+		address _tokenToSell,
+		address _tokenToBuy,
+		uint256 _amountOfTokenToSell,
+		uint256 _amountOfTokenToBuy
+	) {
+		if (msg.sender == address(0)) revert InvalidAddress();
+		if (_buyer == address(0)) revert InvalidAddress();
+		if (_tokenToSell == address(0)) revert InvalidAddress();
+		if (_tokenToBuy == address(0)) revert InvalidAddress();
+		if (_tokenToSell == _tokenToBuy) revert CannotTradeSameToken();
+		if (msg.sender == _buyer) revert CannotTradeWithSelf();
+		if (_amountOfTokenToSell == 0) revert InvalidAmount();
+		if (_amountOfTokenToBuy == 0) revert InvalidAmount();
+		if (IERC20(_tokenToSell).balanceOf(msg.sender) < _amountOfTokenToSell) revert InsufficientBalance();
+		_;
+	}
+	modifier validateCloseTrade(address seller, uint256 index) {
+		Trade memory trade = userToTrades[seller][index];
+		if (trade.buyer != msg.sender) revert OnlyBuyer();
+		if (trade.status != TradeStatus.Pending) revert TradeIsNotPending(); //Do we need to check this?
+		if (trade.deadline < block.timestamp) revert TradeIsExpired();
+		IERC20 token = IERC20(trade.tokenToBuy);
+		if (token.allowance(msg.sender, address(this)) < trade.amountOfTokenToBuy) revert InsufficientAllowance();
+		if (token.balanceOf(msg.sender) < trade.amountOfTokenToBuy) revert InsufficientBalance();
+		_;
+	}
 
-    bytes32 public tradeId;
+	/**
+	 *@dev  Create Trade to initialize a trade as a seller
+	 *@param _buyer address of the buyer
+	 *@param _tokenToSell address of the token to sell
+	 *@param _tokenToBuy address of the token to buy
+	 *@param _amountOfTokenToSell amount of token to sell
+	 *@param _amountOfTokenToBuy amount of token to buy
+	 *@param _deadline deadline of the trade in unix timestamp
+	 */
 
-    // Modifiers
+	function addTrade(
+		address _buyer,
+		address _tokenToSell,
+		address _tokenToBuy,
+		uint256 _amountOfTokenToSell,
+		uint256 _amountOfTokenToBuy,
+		uint256 _deadline
+	) external onlyValidTrade(_buyer, _tokenToSell, _tokenToBuy, _amountOfTokenToSell, _amountOfTokenToBuy) {
+		IERC20 token = IERC20(_tokenToSell);
+		token.safeTransferFrom(msg.sender, address(this), _amountOfTokenToSell);
 
-    modifier onlyValidTrade(
-        address _buyer,
-        address _tokenToSell,
-        address _tokenToBuy,
-        uint256 _amountOfTokenToSell,
-        uint256 _amountOfTokenToBuy
-    ) {
-        if (msg.sender == address(0)) revert InvalidAddress();
-        if (_buyer == address(0)) revert InvalidAddress();
-        if (_tokenToSell == address(0)) revert InvalidAddress();
-        if (_tokenToBuy == address(0)) revert InvalidAddress();
-        if (_tokenToSell == _tokenToBuy) revert CannotTradeSameToken();
-        if (msg.sender == _buyer) revert CannotTradeWithSelf();
-        if (_amountOfTokenToSell == 0) revert InvalidAmount();
-        if (_amountOfTokenToBuy == 0) revert InvalidAmount();
-        _;
-    }
+		Trade memory trade = Trade(
+			msg.sender,
+			_buyer,
+			_tokenToSell,
+			_tokenToBuy,
+			_amountOfTokenToSell,
+			_amountOfTokenToBuy,
+			_deadline,
+			TradeStatus.Pending
+		);
 
-    function createTrade(
-        address _buyer,
-        address _tokenToSell,
-        address _tokenToBuy,
-        uint256 _amountOfTokenToSell,
-        uint256 _amountOfTokenToBuy,
-        uint256 _deadline
-    )
-        public
-        onlyValidTrade(
-            _buyer,
-            _tokenToSell,
-            _tokenToBuy,
-            _amountOfTokenToSell,
-            _amountOfTokenToBuy
-        )
-    {
-        IERC20 token = IERC20(_tokenToSell);
-        // token.approve(address(this), _amountOfTokenToSell);
-        token.transferFrom(msg.sender, address(this), _amountOfTokenToSell);
-        tradeId = keccak256(
-            abi.encodePacked(block.timestamp, msg.sender, _buyer) // timestamp may be vulnerable time manipulation attack. instead of this can we use block.number or block.blockhash? or not use block data at all?
-        );
-        Trade memory trade = Trade(
-            msg.sender,
-            _buyer,
-            _tokenToSell,
-            _tokenToBuy,
-            _amountOfTokenToSell,
-            _amountOfTokenToBuy,
-            tradeId,
-            _deadline,
-            TradeStatus.Pending
-        );
+		userToTrades[msg.sender].push(trade);
+		userToTokenToAmount[msg.sender][_tokenToSell] = _amountOfTokenToSell;
 
-        trades[tradeId] = trade;
-        userToTradeIds[msg.sender].push(tradeId);
-        // userTradesAsBuyer[_buyer].push(tradeId);
-        tokenAllowance[msg.sender][_tokenToSell] = _amountOfTokenToSell;
+		emit TradeCreated(
+			msg.sender,
+			_buyer,
+			_tokenToSell,
+			_tokenToBuy,
+			_amountOfTokenToSell,
+			_amountOfTokenToBuy,
+			_deadline
+		);
+	}
 
-        emit TradeCreated(
-            msg.sender,
-            _buyer,
-            tradeId,
-            _tokenToSell,
-            _tokenToBuy,
-            _amountOfTokenToSell,
-            _amountOfTokenToBuy
-        );
-    }
+	function closeTrade(address seller, uint256 index) external validateCloseTrade(seller, index) {
+		Trade memory trade = userToTrades[seller][index];
+
+		IERC20(trade.tokenToBuy).safeTransferFrom(msg.sender, trade.seller, trade.amountOfTokenToBuy);
+		// Transfer token to buyer from contract
+		IERC20(trade.tokenToSell).safeTransfer(trade.buyer, trade.amountOfTokenToSell);
+		trade.status = TradeStatus.Accepted;
+
+		userToTokenToAmount[seller][trade.tokenToSell] = 0;
+		emit TradeAccepted(seller, msg.sender);
+	}
+
+	/***********
+	 * GETTERS *
+	 ***********/
+
+	function getTrades(address userAddress) external view returns (Trade[] memory) {
+		return userToTrades[userAddress];
+	}
+
+	function getTrade(address userAddress, uint256 index) external view returns (Trade memory) {
+		return userToTrades[userAddress][index];
+	}
 
 }
