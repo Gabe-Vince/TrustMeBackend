@@ -1,10 +1,5 @@
 import {HardhatUserConfig} from 'hardhat/config';
 import '@nomicfoundation/hardhat-toolbox';
-import '@typechain/hardhat';
-import '@nomiclabs/hardhat-ethers';
-import '@nomiclabs/hardhat-waffle';
-import 'solidity-coverage';
-import 'hardhat-gas-reporter';
 import 'hardhat-contract-sizer';
 import 'hardhat-deploy';
 import {NetworkUserConfig} from 'hardhat/types';
@@ -56,7 +51,7 @@ const config: HardhatUserConfig = {
 		target: 'ethers-v5',
 	},
 	contractSizer: {
-		alphaSort: true,
+		alphaSort: false,
 		runOnCompile: true,
 		disambiguatePaths: false,
 	},
