@@ -132,4 +132,5 @@ contract TrustMe {
             _amountOfTokenToBuy
         );
     }
+
 }
