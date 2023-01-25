@@ -170,12 +170,19 @@ describe('TrustMe', () => {
 			addTrade.wait();
 		});
 
+		it('Should add trade to userToTrade mapping array', async () => {
+			expect(await trustMe.getTrades(seller.address)).to.have.lengthOf(1);
+		});
+		it("Should revert if trade doesn't exist", async () => {
+			expect(trustMe.connect(buyer).closeTrade(seller.address, 1)).to.be.revertedWithPanic;
+		});
 		it('should trade between the seller and buyer', async () => {
-			const index = await trustMe.getLatestTrade(seller.address);
+			// const index = await trustMe.getLatestTradeIndex(seller.address);
 			console.log('Seller Balance Before: ', (await buyerToken.balanceOf(seller.address)).toString());
 			console.log('Buyer Balance Before: ', (await sellerToken.balanceOf(buyer.address)).toString());
 			await buyerToken.connect(buyer).approve(trustMe.address, parseEther('100'));
-			const confirmTrade = await trustMe.connect(buyer).closeTrade(seller.address, index);
+			const confirmTrade = await trustMe.connect(buyer).closeTrade(seller.address, 0);
+
 			confirmTrade.wait();
 			console.log('Seller Balance After: ', (await buyerToken.balanceOf(seller.address)).toString());
 			console.log('Buyer Balance After: ', (await sellerToken.balanceOf(buyer.address)).toString());
@@ -184,30 +191,87 @@ describe('TrustMe', () => {
 		});
 
 		it('should emit TradeConfirmed event', async () => {
-			const index = await trustMe.getLatestTrade(seller.address);
+
+			// const index = await trustMe.getTrade(seller.address, 0);// we only have one trade
 			await buyerToken.connect(buyer).approve(trustMe.address, parseEther('100'));
-			const confirmTrade = await trustMe.connect(buyer).closeTrade(seller.address, index);
+			const confirmTrade = await trustMe.connect(buyer).closeTrade(seller.address, 0);
 			confirmTrade.wait();
-			await expect(confirmTrade).to.emit(trustMe, 'TradeAccepted').withArgs(seller.address, buyer.address);
+			await expect(confirmTrade).to.emit(trustMe, 'TradeConfirmed').withArgs(seller.address, buyer.address);
 		});
 
 		it('should revert if incorrect buyer', async () => {
-			const index = await trustMe.getLatestTrade(seller.address);
+			// const index = await trustMe.getLatestTradeIndex(seller.address);
 			await buyerToken.connect(buyer).approve(trustMe.address, parseEther('100'));
-			expect(trustMe.connect(contractsDeployer).closeTrade(seller.address, index)).to.be.revertedWithCustomError(
+			expect(trustMe.connect(contractsDeployer).closeTrade(seller.address, 0)).to.be.revertedWithCustomError(
 				trustMe,
 				'OnlyBuyer'
 			);
 		});
 
 		it('should revert if deadline is expired', async () => {
-			const index = await trustMe.getLatestTrade(seller.address);
+
+			// const index = await trustMe.getLatestTradeIndex(seller.address);
 			await buyerToken.connect(buyer).approve(trustMe.address, parseEther('100'));
 			await time.increase(601);
-			expect(trustMe.connect(buyer).closeTrade(seller.address, index)).to.be.revertedWithCustomError(
+			expect(trustMe.connect(buyer).closeTrade(seller.address, 0)).to.be.revertedWithCustomError(
 				trustMe,
 				'TradeIsExpired'
 			);
 		});
+
+
+		it("Should delete trade from user's trade array after trade is confirmed", async () => {
+			await buyerToken.connect(buyer).approve(trustMe.address, parseEther('100'));
+			const confirmTrade = await trustMe.connect(buyer).closeTrade(seller.address, 0);
+			confirmTrade.wait();
+			expect(await trustMe.getTrades(seller.address)).to.be.revertedWithPanic;
+		});
+	});
+
+	describe('cancelTrade functionality', () => {
+		beforeEach(async () => {
+			const currentTime = await time.latest();
+			await sellerToken.connect(seller).approve(trustMe.address, parseEther('100'));
+			const addTrade = await trustMe.connect(seller).addTrade(
+				buyer.address,
+				sellerToken.address,
+				buyerToken.address,
+				parseEther('100'),
+				parseEther('100'),
+				currentTime + 600 // 10 mins deadline
+			);
+			addTrade.wait();
+		});
+		it('Should revert if not seller', async () => {
+			expect(trustMe.connect(buyer).cancelTrade(0)).to.be.revertedWithCustomError(trustMe, 'OnlySeller');
+		});
+		it("Should revert if trade doesn't exist", async () => {
+			expect(trustMe.connect(seller).cancelTrade(1)).to.be.revertedWithPanic;
+		});
+
+		it('Should revert if deadline is expired', async () => {
+			await time.increase(601);
+			expect(trustMe.connect(seller).cancelTrade(0)).to.be.revertedWithCustomError(trustMe, 'TradeIsExpired');
+		});
+		it('Should refund seller', async () => {
+			const balanceBefore = await sellerToken.balanceOf(seller.address);
+			const cancelTrade = await trustMe.connect(seller).cancelTrade(0);
+			cancelTrade.wait();
+			const balanceAfter = await sellerToken.balanceOf(seller.address);
+			expect(balanceAfter).to.eq(balanceBefore.add(parseEther('100')));
+		});
+		it('Should emit TradeCancelled event', async () => {
+			const cancelTrade = await trustMe.connect(seller).cancelTrade(0);
+			cancelTrade.wait();
+			await expect(cancelTrade)
+				.to.emit(trustMe, 'TradeCanceled')
+				.withArgs(seller.address, buyer.address, sellerToken.address, buyerToken.address);
+		});
+		it("Should delete trade from user's trade array after trade is cancelled", async () => {
+			const cancelTrade = await trustMe.connect(seller).cancelTrade(0);
+			cancelTrade.wait();
+			expect(await trustMe.getTrades(seller.address)).to.be.revertedWithPanic;
+		});
+
 	});
 });
