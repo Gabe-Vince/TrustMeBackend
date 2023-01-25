@@ -18,6 +18,7 @@ error TradeIsExpired();
 error InsufficientAllowance();
 
 contract TrustMe {
+
 	/**********
 	 * EVENTS *
 	 **********/
@@ -34,7 +35,9 @@ contract TrustMe {
 
 	event TradeConfirmed(address indexed seller, address indexed buyer);
 	event TradeExpired(address indexed seller, address indexed buyer);
+
 	event TradeCanceled(address indexed seller, address indexed buyer, address tokenToSell, address tokenToBuy);
+
 
 	using SafeERC20 for IERC20;
 
@@ -184,7 +187,9 @@ contract TrustMe {
 		return userToTrades[userAddress][index];
 	}
 
+
 	function getLatestTradeIndex(address userAddress) external view returns (uint256) {
+
 		return userToTrades[userAddress].length - 1;
 	}
 }

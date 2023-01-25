@@ -169,6 +169,7 @@ describe('TrustMe', () => {
 			);
 			addTrade.wait();
 		});
+
 		it('Should add trade to userToTrade mapping array', async () => {
 			expect(await trustMe.getTrades(seller.address)).to.have.lengthOf(1);
 		});
@@ -181,6 +182,7 @@ describe('TrustMe', () => {
 			console.log('Buyer Balance Before: ', (await sellerToken.balanceOf(buyer.address)).toString());
 			await buyerToken.connect(buyer).approve(trustMe.address, parseEther('100'));
 			const confirmTrade = await trustMe.connect(buyer).closeTrade(seller.address, 0);
+
 			confirmTrade.wait();
 			console.log('Seller Balance After: ', (await buyerToken.balanceOf(seller.address)).toString());
 			console.log('Buyer Balance After: ', (await sellerToken.balanceOf(buyer.address)).toString());
@@ -189,6 +191,7 @@ describe('TrustMe', () => {
 		});
 
 		it('should emit TradeConfirmed event', async () => {
+
 			// const index = await trustMe.getTrade(seller.address, 0);// we only have one trade
 			await buyerToken.connect(buyer).approve(trustMe.address, parseEther('100'));
 			const confirmTrade = await trustMe.connect(buyer).closeTrade(seller.address, 0);
@@ -206,6 +209,7 @@ describe('TrustMe', () => {
 		});
 
 		it('should revert if deadline is expired', async () => {
+
 			// const index = await trustMe.getLatestTradeIndex(seller.address);
 			await buyerToken.connect(buyer).approve(trustMe.address, parseEther('100'));
 			await time.increase(601);
@@ -214,6 +218,7 @@ describe('TrustMe', () => {
 				'TradeIsExpired'
 			);
 		});
+
 
 		it("Should delete trade from user's trade array after trade is confirmed", async () => {
 			await buyerToken.connect(buyer).approve(trustMe.address, parseEther('100'));
@@ -267,5 +272,6 @@ describe('TrustMe', () => {
 			cancelTrade.wait();
 			expect(await trustMe.getTrades(seller.address)).to.be.revertedWithPanic;
 		});
+
 	});
 });
