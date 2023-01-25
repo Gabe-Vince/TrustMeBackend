@@ -2,7 +2,7 @@ import {SignerWithAddress} from '@nomiclabs/hardhat-ethers/signers';
 import {expect} from 'chai';
 import {Signer} from 'ethers';
 import {parseEther} from 'ethers/lib/utils';
-import {deployments, ethers, getNamedAccounts} from 'hardhat';
+import {deployments, ethers} from 'hardhat';
 import {BuyerToken, SellerToken, TrustMe} from '../../typechain';
 import {time} from '@nomicfoundation/hardhat-network-helpers';
 describe('TrustMe', () => {
@@ -110,16 +110,16 @@ describe('TrustMe', () => {
 		});
 		it('Should emit TradeCreated event if trade is created successfully', async () => {
 			await sellerToken.connect(seller).approve(trustMe.address, parseEther('100'));
-			await expect(
-				trustMe.connect(seller).addTrade(
-					buyer.address,
-					sellerToken.address,
-					buyerToken.address,
-					parseEther('100'),
-					parseEther('100'),
-					(await time.latest()) + 600 // 10 mins deadline
-				)
-			)
+			const tx = await trustMe.connect(seller).addTrade(
+				buyer.address,
+				sellerToken.address,
+				buyerToken.address,
+				parseEther('100'),
+				parseEther('100'),
+				600 // 10 mins deadline
+			);
+			const timestamp = await time.latest();
+			await expect(tx)
 				.to.emit(trustMe, 'TradeCreated')
 				.withArgs(
 					seller.address,
@@ -128,12 +128,11 @@ describe('TrustMe', () => {
 					buyerToken.address,
 					parseEther('100'),
 					parseEther('100'),
-					(await time.latest()) + 600
+					timestamp + 600
 				);
 		});
 
 		it('Should create trade successfully', async () => {
-			const currentTime = await time.latest();
 			await sellerToken.connect(seller).approve(trustMe.address, parseEther('100'));
 			await trustMe.connect(seller).addTrade(
 				buyer.address,
@@ -141,8 +140,9 @@ describe('TrustMe', () => {
 				buyerToken.address,
 				parseEther('100'),
 				parseEther('100'),
-				currentTime + 600 // 10 mins deadline
+				600 // 10 mins deadline
 			);
+			const timestamp = await time.latest();
 
 			const trade = await trustMe.getTrade(seller.address, 0);
 			expect(trade.seller).to.equal(seller.address);
@@ -151,7 +151,7 @@ describe('TrustMe', () => {
 			expect(trade.tokenToBuy).to.equal(buyerToken.address);
 			expect(trade.amountOfTokenToSell).to.equal(parseEther('100'));
 			expect(trade.amountOfTokenToBuy).to.equal(parseEther('100'));
-			expect(trade.deadline).to.equal(currentTime + 600);
+			expect(trade.deadline).to.equal(timestamp + 600);
 		});
 	});
 
@@ -191,7 +191,6 @@ describe('TrustMe', () => {
 		});
 
 		it('should emit TradeConfirmed event', async () => {
-
 			// const index = await trustMe.getTrade(seller.address, 0);// we only have one trade
 			await buyerToken.connect(buyer).approve(trustMe.address, parseEther('100'));
 			const confirmTrade = await trustMe.connect(buyer).closeTrade(seller.address, 0);
@@ -209,7 +208,6 @@ describe('TrustMe', () => {
 		});
 
 		it('should revert if deadline is expired', async () => {
-
 			// const index = await trustMe.getLatestTradeIndex(seller.address);
 			await buyerToken.connect(buyer).approve(trustMe.address, parseEther('100'));
 			await time.increase(601);
@@ -218,7 +216,6 @@ describe('TrustMe', () => {
 				'TradeIsExpired'
 			);
 		});
-
 
 		it("Should delete trade from user's trade array after trade is confirmed", async () => {
 			await buyerToken.connect(buyer).approve(trustMe.address, parseEther('100'));
@@ -230,7 +227,6 @@ describe('TrustMe', () => {
 
 	describe('cancelTrade functionality', () => {
 		beforeEach(async () => {
-			const currentTime = await time.latest();
 			await sellerToken.connect(seller).approve(trustMe.address, parseEther('100'));
 			const addTrade = await trustMe.connect(seller).addTrade(
 				buyer.address,
@@ -238,8 +234,9 @@ describe('TrustMe', () => {
 				buyerToken.address,
 				parseEther('100'),
 				parseEther('100'),
-				currentTime + 600 // 10 mins deadline
+				600 // 10 mins deadline
 			);
+
 			addTrade.wait();
 		});
 		it('Should revert if not seller', async () => {
@@ -268,10 +265,40 @@ describe('TrustMe', () => {
 				.withArgs(seller.address, buyer.address, sellerToken.address, buyerToken.address);
 		});
 		it("Should delete trade from user's trade array after trade is cancelled", async () => {
-			const cancelTrade = await trustMe.connect(seller).cancelTrade(0);
-			cancelTrade.wait();
-			expect(await trustMe.getTrades(seller.address)).to.be.revertedWithPanic;
-		});
+			await sellerToken.connect(seller).approve(trustMe.address, parseEther('200'));
+			const addTrade = await trustMe.connect(seller).addTrade(
+				buyer.address,
+				sellerToken.address,
+				buyerToken.address,
+				parseEther('200'),
+				parseEther('200'),
+				600 // 10 mins deadline
+			);
+			await sellerToken.connect(seller).approve(trustMe.address, parseEther('300'));
+			const addTrade2 = await trustMe.connect(seller).addTrade(
+				buyer.address,
+				sellerToken.address,
+				buyerToken.address,
+				parseEther('300'),
+				parseEther('300'),
+				600 // 10 mins deadline
+			);
+			console.log(
+				'Trade:',
+				await trustMe.getTrades(seller.address),
+				'Trade Length:',
+				(await trustMe.getTrades(seller.address)).length
+			);
 
+			const cancelTrade = await trustMe.connect(seller).cancelTrade(1);
+			console.log(
+				'Trade:',
+				await trustMe.getTrades(seller.address),
+				'Trade Length:',
+				(await trustMe.getTrades(seller.address)).length
+			);
+			cancelTrade.wait();
+			// expect(await (await trustMe.getTrades(contractsDeployer.address)).length).to.eq(0);
+		});
 	});
 });

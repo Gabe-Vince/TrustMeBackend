@@ -4,11 +4,12 @@ pragma solidity ^0.8.17;
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "hardhat/console.sol";
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
+import "@chainlink/contracts/src/v0.8/AutomationCompatible.sol";
 
 error InvalidAddress();
 error CannotTradeSameToken();
 error CannotTradeWithSelf();
-error DeadlineShouldBeAtLeastAMinute();
+error DeadlineShouldBeAtLeast5Minutes();
 error InvalidAmount();
 error InsufficientBalance();
 error OnlyBuyer();
@@ -17,8 +18,7 @@ error TradeIsNotPending();
 error TradeIsExpired();
 error InsufficientAllowance();
 
-contract TrustMe {
-
+contract TrustMe is AutomationCompatible {
 	/**********
 	 * EVENTS *
 	 **********/
@@ -38,7 +38,6 @@ contract TrustMe {
 
 	event TradeCanceled(address indexed seller, address indexed buyer, address tokenToSell, address tokenToBuy);
 
-
 	using SafeERC20 for IERC20;
 
 	/**********************
@@ -47,7 +46,7 @@ contract TrustMe {
 
 	enum TradeStatus {
 		Pending,
-		Accepted,
+		Closed,
 		Expired
 	}
 
@@ -63,6 +62,9 @@ contract TrustMe {
 	}
 	mapping(address => Trade[]) public userToTrades;
 	// mapping(address => mapping(address => uint256)) public userToTokenToAmount;
+	event TokensWithdrawn(address indexed seller, uint tradeIndex);
+
+	Trade[] pendingTrades;
 
 	/***************
 	 * MODIFIERS *
@@ -124,8 +126,9 @@ contract TrustMe {
 		uint256 _amountOfTokenToBuy,
 		uint256 _deadline
 	) external validateAddTrade(_buyer, _tokenToSell, _tokenToBuy, _amountOfTokenToSell, _amountOfTokenToBuy) {
-		// console.log("deadline user entered", _deadline);
-		// console.log("deadline in blockchain",block.timestamp + 600);
+		_deadline = block.timestamp + _deadline;
+		// console.log("Deadline: %s", _deadline);
+		// console.log("Block timestamp: %s", block.timestamp);
 		IERC20 token = IERC20(_tokenToSell);
 		token.safeTransferFrom(msg.sender, address(this), _amountOfTokenToSell);
 		Trade memory trade = Trade(
@@ -140,7 +143,6 @@ contract TrustMe {
 		);
 
 		userToTrades[msg.sender].push(trade);
-		// userToTokenToAmount[msg.sender][_tokenToSell] = _amountOfTokenToSell;
 
 		emit TradeCreated(
 			msg.sender,
@@ -153,13 +155,19 @@ contract TrustMe {
 		);
 	}
 
+	function withdrawTokens(address seller, uint indexTrade) public {
+		Trade storage trade = userToTrades[seller][indexTrade];
+		IERC20(trade.tokenToSell).safeTransfer(seller, trade.amountOfTokenToSell);
+		emit TokensWithdrawn(msg.sender, 1234);
+	}
+
 	function closeTrade(address seller, uint256 index) external validateCloseTrade(seller, index) {
 		Trade memory trade = userToTrades[seller][index];
 
 		IERC20(trade.tokenToBuy).safeTransferFrom(msg.sender, trade.seller, trade.amountOfTokenToBuy);
 		// Transfer token to buyer from contract
 		IERC20(trade.tokenToSell).safeTransfer(trade.buyer, trade.amountOfTokenToSell);
-		trade.status = TradeStatus.Accepted;
+		trade.status = TradeStatus.Closed;
 
 		// userToTokenToAmount[seller][trade.tokenToSell] = 0;
 		emit TradeConfirmed(seller, msg.sender);
@@ -171,8 +179,12 @@ contract TrustMe {
 		Trade memory trade = userToTrades[msg.sender][index];
 		IERC20(trade.tokenToSell).safeTransfer(trade.seller, trade.amountOfTokenToSell);
 		// userToTokenToAmount[seller][trade.tokenToSell] = 0;
+		for (uint i = index; i < userToTrades[msg.sender].length - 1; i++) {
+			userToTrades[msg.sender][i] = userToTrades[msg.sender][i + 1];
+		}
+		userToTrades[msg.sender].pop();
+
 		emit TradeCanceled(msg.sender, trade.buyer, trade.tokenToSell, trade.tokenToBuy);
-		delete userToTrades[trade.seller];
 	}
 
 	/***********
@@ -187,14 +199,78 @@ contract TrustMe {
 		return userToTrades[userAddress][index];
 	}
 
-
 	function getLatestTradeIndex(address userAddress) external view returns (uint256) {
-
 		return userToTrades[userAddress].length - 1;
+	}
+
+	/************************
+	 * CHAINLINK AUTOMATION *
+	 ************************/
+
+	/************************
+	 * CHAINLINK AUTOMATION *
+	 ************************/
+
+	function checkUpkeep(bytes calldata checkData) external view returns (bool upkeepNeeded, bytes memory performData) {
+		(bool hasExpired, address seller, int indexTrade) = checkExpiredTrades();
+		return (hasExpired, abi.encode(seller, indexTrade));
+	}
+
+	function performUpkeep(bytes calldata performData) external override {
+		(address seller, int256 index) = abi.decode(performData, (address, int256));
+		Trade storage trade = userToTrades[seller][uint(index)];
+		IERC20 token = IERC20(trade.tokenToSell);
+		require(trade.deadline < block.timestamp);
+		trade.status = TradeStatus.Expired;
+		removePendingTrade(trade);
+		require(token.balanceOf(address(this)) == trade.amountOfTokenToSell);
+		withdrawTokens(seller, uint(index));
+	}
+
+	function checkExpiredTrades() internal view returns (bool, address, int) {
+		for (uint i = 0; i < pendingTrades.length; i++) {
+			if (block.timestamp > pendingTrades[i].deadline) {
+				return (true, pendingTrades[i].seller, getIndexUserToTrades(pendingTrades[i]));
+			}
+		}
+		return (false, address(0), 0);
+	}
+
+	function removePendingTrade(Trade memory _trade) internal {
+		uint index;
+		for (uint i = 0; i < pendingTrades.length; i++) {
+			if (
+				pendingTrades[i].seller == _trade.seller &&
+				pendingTrades[i].buyer == _trade.buyer &&
+				pendingTrades[i].tokenToSell == _trade.tokenToSell &&
+				pendingTrades[i].tokenToBuy == _trade.tokenToBuy &&
+				pendingTrades[i].amountOfTokenToSell == _trade.amountOfTokenToSell &&
+				pendingTrades[i].amountOfTokenToBuy == _trade.amountOfTokenToBuy &&
+				pendingTrades[i].deadline == _trade.deadline &&
+				pendingTrades[i].status == _trade.status
+			) index = i;
+		}
+		pendingTrades[pendingTrades.length - 1] = pendingTrades[index];
+		pendingTrades.pop();
+	}
+
+	function getIndexUserToTrades(Trade memory _trade) internal view returns (int) {
+		for (uint i = 0; i < userToTrades[_trade.seller].length; i++) {
+			Trade memory trade = userToTrades[_trade.seller][i];
+			if (
+				trade.seller == _trade.seller &&
+				trade.buyer == _trade.buyer &&
+				trade.tokenToSell == _trade.tokenToSell &&
+				trade.tokenToBuy == _trade.tokenToBuy &&
+				trade.amountOfTokenToSell == _trade.amountOfTokenToSell &&
+				trade.amountOfTokenToBuy == _trade.amountOfTokenToBuy &&
+				trade.deadline == _trade.deadline &&
+				trade.status == _trade.status
+			) return int(i);
+		}
+		return -1;
 	}
 }
 
-// TODO: check test converage
 // TODO: Is there is any way to clear out those if condition in a modifier? Because it is really smelling bad
 // TODO: ADD scrips for frontend
-// TODO: when user call addTrade functiona and pass deadline it is slightly different from the timestamp in blockchain. This is obviously because of the mining time but do we need to worry about this? uncomment the line 124-125  and run test to see what i'm saying. To fix this we need to add a minimum requirement for the deadline like 5 or 10 mins.So that the block can be mined before the trade expiration.
