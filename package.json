@@ -8,7 +8,10 @@
     "coverage": "npx hardhat coverage",
     "deploy": "npx hardhat deploy",
     "test:gas": "UPDATE_SNAPSHOT=1 yarn test --grep gas",
-    "clean": "rm -rf ./artifacts ./cache ./typechain"
+    "clean": "rm -rf ./artifacts ./cache ./typechain",
+    "add-trade":"npx hardhat run scripts/addTrade.ts",
+    "close-trade":"npx hardhat run scripts/closeTrade.ts",
+    "cancel-trade":"npx hardhat run scripts/cancelTrade.ts"
   },
   "devDependencies": {
     "@ethersproject/abi": "^5.4.7",
@@ -39,6 +42,7 @@
     "typescript": ">=4.5.0"
   },
   "dependencies": {
+    "@chainlink/contracts": "^0.6.0",
     "@openzeppelin/contracts": "^4.8.1"
   }
 }
