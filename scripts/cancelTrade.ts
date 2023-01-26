@@ -9,9 +9,10 @@ const addTrade = async () => {
 	const buyerToken: BuyerToken = await ethers.getContract('BuyerToken');
 	const sellerTokenAddress = sellerToken.address;
 	const buyerTokenAddress = buyerToken.address;
-	// Approve seller token
+	// Transfer seller token to seller from deployer
 	await sellerToken.transfer(seller.address, parseEther('100'));
 
+	// Approve seller token
 	await sellerToken.connect(seller).approve(trustMe.address, parseEther('100'));
 	console.log('Adding Trade...');
 	await trustMe

@@ -18,37 +18,19 @@ error TradeIsNotPending();
 error TradeIsExpired();
 error InsufficientAllowance();
 error UpkeepNotNeeded();
+error CannotWithdrawTimeNotPassed();
 
 contract TrustMe is AutomationCompatible {
-	/**********
-	 * EVENTS *
-	 **********/
-
-	event TradeCreated(
-		address indexed seller,
-		address indexed buyer,
-		address tokenToSell,
-		address tokenToBuy,
-		uint256 amountOfTokenToSell,
-		uint256 amountOfTokenToBuy,
-		uint deadline
-	);
-
-	event TradeConfirmed(address indexed seller, address indexed buyer);
-	event TradeExpired(address indexed seller, address indexed buyer);
-
-	event TradeCanceled(address indexed seller, address indexed buyer, address tokenToSell, address tokenToBuy);
-
 	using SafeERC20 for IERC20;
-
-	/**********************
-	 *  STATE VARIABLES *
-	 **********************/
-
+	/*********
+	 * TYPES *
+	 *********/
 	enum TradeStatus {
 		Pending,
-		Closed,
-		Expired
+		Confirmed,
+		Canceled,
+		Expired,
+		Withdrawn
 	}
 
 	struct Trade {
@@ -59,19 +41,36 @@ contract TrustMe is AutomationCompatible {
 		uint256 amountOfTokenToSell;
 		uint256 amountOfTokenToBuy;
 		uint256 deadline;
+		bool isAvailableToWithdraw;
 		TradeStatus status;
 	}
+
+	/**********************
+	 *  STATE VARIABLES *
+	 **********************/
 	mapping(address => Trade[]) public userToTrades;
-	// mapping(address => mapping(address => uint256)) public userToTokenToAmount;
-	event TokensWithdrawn(address indexed seller, uint tradeIndex);
-	uint public testCounter;
-	uint lastTimeStamp;
 	address[] private sellerAddresses;
+
+	/**********
+	 * EVENTS *
+	 **********/
+	event TradeCreated(
+		address indexed seller,
+		address indexed buyer,
+		address tokenToSell,
+		address tokenToBuy,
+		uint256 amountOfTokenToSell,
+		uint256 amountOfTokenToBuy,
+		uint deadline
+	);
+	event TradeConfirmed(address indexed seller, address indexed buyer);
+	event TradeExpired(address indexed seller, address indexed buyer);
+	event TradeCanceled(address indexed seller, address indexed buyer, address tokenToSell, address tokenToBuy);
+	event TokensWithdrawn(address indexed seller, uint tradeIndex);
 
 	/***************
 	 * MODIFIERS *
 	 ***************/
-
 	modifier validateAddTrade(
 		address _buyer,
 		address _tokenToSell,
@@ -110,10 +109,6 @@ contract TrustMe is AutomationCompatible {
 		_;
 	}
 
-	constructor() {
-		lastTimeStamp = block.timestamp;
-	}
-
 	/**
 	 *@dev  Create Trade to initialize a trade as a seller
 	 *@param _buyer address of the buyer
@@ -143,6 +138,7 @@ contract TrustMe is AutomationCompatible {
 			_amountOfTokenToSell,
 			_amountOfTokenToBuy,
 			tradePeriod,
+			false,
 			TradeStatus.Pending
 		);
 
@@ -160,46 +156,29 @@ contract TrustMe is AutomationCompatible {
 		);
 	}
 
-	function closeTrade(address seller, uint256 index) external validateCloseTrade(seller, index) {
-		Trade memory trade = userToTrades[seller][index];
+	function confirmTrade(address seller, uint256 index) external validateCloseTrade(seller, index) {
+		Trade storage trade = userToTrades[seller][index];
 
 		IERC20(trade.tokenToBuy).safeTransferFrom(msg.sender, trade.seller, trade.amountOfTokenToBuy);
-		// Transfer token to buyer from contract
 		IERC20(trade.tokenToSell).safeTransfer(trade.buyer, trade.amountOfTokenToSell);
-		trade.status = TradeStatus.Closed;
-		for (uint i = index; i < sellerAddresses.length - 1; i++) {
-			sellerAddresses[i] = sellerAddresses[i + 1];
-		}
-		sellerAddresses.pop();
-		// Are we deleting a trade?
-		// delete userToTrades[trade.seller];
+		trade.status = TradeStatus.Confirmed;
 		emit TradeConfirmed(seller, msg.sender);
 	}
 
 	function cancelTrade(uint256 index) external validateCancelTrade(index) {
-		Trade memory trade = userToTrades[msg.sender][index];
-		for (uint i = index; i < userToTrades[msg.sender].length - 1; i++) {
-			userToTrades[msg.sender][i] = userToTrades[msg.sender][i + 1];
-			sellerAddresses[i] = sellerAddresses[i + 1];
-		}
-		userToTrades[msg.sender].pop();
-		sellerAddresses.pop();
-
+		Trade storage trade = userToTrades[msg.sender][index];
+		trade.status = TradeStatus.Canceled;
 		IERC20(trade.tokenToSell).transfer(trade.seller, trade.amountOfTokenToSell);
 		emit TradeCanceled(msg.sender, trade.buyer, trade.tokenToSell, trade.tokenToBuy);
 	}
 
-	function withdrawTokens(address seller, uint index) public {
+	function withdrawToken(address seller, uint index) public {
+		if (msg.sender != seller) revert OnlySeller();
 		Trade memory trade = userToTrades[seller][index];
+		if (trade.isAvailableToWithdraw == false) revert CannotWithdrawTimeNotPassed();
 		IERC20(trade.tokenToSell).safeTransfer(seller, trade.amountOfTokenToSell);
-		// for (uint i = index; i < userToTrades[msg.sender].length - 1; i++) {
-		// 	userToTrades[msg.sender][i] = userToTrades[msg.sender][i + 1];
-		// 	sellerAddresses[i] = sellerAddresses[i + 1];
-		// }
-
-		// userToTrades[msg.sender].pop();
-		// sellerAddresses.pop();
-
+		userToTrades[seller][index].isAvailableToWithdraw = false;
+		userToTrades[seller][index].status = TradeStatus.Withdrawn;
 		emit TokensWithdrawn(msg.sender, trade.amountOfTokenToSell);
 	}
 
@@ -209,32 +188,35 @@ contract TrustMe is AutomationCompatible {
 
 	function checkUpkeep(
 		bytes memory /*checkData*/
-	) public view override returns (bool upkeepNeeded, bytes memory performData) {
-		bool _upkeepNeeded;
-		bytes memory withdrawTokensFunction;
+	) public override returns (bool upkeepNeeded, bytes memory performData) {
 		for (uint i = 0; i < sellerAddresses.length; i++) {
 			address sellerAddress = sellerAddresses[i];
-			Trade memory trade = userToTrades[sellerAddress][i];
-			if (trade.deadline <= block.timestamp) {
-				_upkeepNeeded = true;
-				withdrawTokensFunction = abi.encodeWithSignature("withdrawTokens(address,uint256)", sellerAddress, i);
-				break;
+			Trade storage trade = userToTrades[sellerAddress][i];
+			if (
+				trade.deadline <= block.timestamp &&
+				trade.status == TradeStatus.Pending &&
+				trade.seller == sellerAddress
+			) {
+				trade.isAvailableToWithdraw = true;
+				upkeepNeeded = true;
+				performData = abi.encode(sellerAddress, i);
 			}
-		}
-		upkeepNeeded = _upkeepNeeded;
-		performData = withdrawTokensFunction;
-		if (_upkeepNeeded) {
-			return (upkeepNeeded, performData);
 		}
 	}
 
+	/**
+	 *@dev Perform Upkeep to withdraw tokens from contract
+	 *@dev This is called by the Chainlink Keeper Network if checkUpkeep returns true or someone can manully call it if checkUpkeep is true
+	 */
 	function performUpkeep(
 		bytes calldata /*performData*/
 	) external override {
 		(bool upkeepNeeded, bytes memory performData) = checkUpkeep("");
 		if (!upkeepNeeded) revert UpkeepNotNeeded();
-		(bool success, ) = address(this).call(performData);
-		require(success, "performUpkeep: failed");
+		(address sellerAddress, uint256 index) = abi.decode(performData, (address, uint256));
+		Trade storage _trade = userToTrades[sellerAddress][index];
+		_trade.isAvailableToWithdraw = true;
+		// withdrawToken(sellerAddress, index); //! we can either directly transfer the tokens here or let the seller manually withdraw them
 	}
 
 	/***********

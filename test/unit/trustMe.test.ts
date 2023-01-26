@@ -109,6 +109,20 @@ describe('TrustMe', () => {
 				)
 			).to.be.revertedWithCustomError(trustMe, 'InsufficientBalance');
 		});
+		it('Should add trade to userToTrade mapping array', async () => {
+			await sellerToken.connect(seller).approve(trustMe.address, parseEther('100'));
+			const tx = await trustMe.connect(seller).addTrade(
+				buyer.address,
+				sellerToken.address,
+				buyerToken.address,
+				parseEther('100'),
+				parseEther('100'),
+				600 // 10 mins deadline
+			);
+
+			expect(await trustMe.getTrades(seller.address)).to.have.lengthOf(1);
+		});
+
 		it('Should emit TradeCreated event if trade is created successfully', async () => {
 			await sellerToken.connect(seller).approve(trustMe.address, parseEther('100'));
 			const tx = await trustMe.connect(seller).addTrade(
@@ -156,7 +170,7 @@ describe('TrustMe', () => {
 		});
 	});
 
-	describe('closeTrade functionality', () => {
+	describe('confirmTrade functionality', () => {
 		beforeEach(async () => {
 			const currentTime = await time.latest();
 			await sellerToken.connect(seller).approve(trustMe.address, parseEther('100'));
@@ -171,74 +185,59 @@ describe('TrustMe', () => {
 			addTrade.wait();
 		});
 
-		it('Should add trade to userToTrade mapping array', async () => {
-			expect(await trustMe.getTrades(seller.address)).to.have.lengthOf(1);
-		});
 		it("Should revert if trade doesn't exist", async () => {
-			expect(trustMe.connect(buyer).closeTrade(seller.address, 1)).to.be.revertedWithPanic;
+			expect(trustMe.connect(buyer).confirmTrade(seller.address, 1)).to.be.revertedWithPanic;
 		});
 		it('should trade between the seller and buyer', async () => {
 			// const index = await trustMe.getLatestTradeIndex(seller.address);
-			console.log('Seller Balance Before: ', (await buyerToken.balanceOf(seller.address)).toString());
-			console.log('Buyer Balance Before: ', (await sellerToken.balanceOf(buyer.address)).toString());
 			await buyerToken.connect(buyer).approve(trustMe.address, parseEther('100'));
-			const confirmTrade = await trustMe.connect(buyer).closeTrade(seller.address, 0);
-
-			confirmTrade.wait();
-			console.log('Seller Balance After: ', (await buyerToken.balanceOf(seller.address)).toString());
-			console.log('Buyer Balance After: ', (await sellerToken.balanceOf(buyer.address)).toString());
+			await trustMe.connect(buyer).confirmTrade(seller.address, 0);
 			expect(await sellerToken.balanceOf(buyer.address)).to.equal(parseEther('100'));
 			expect(await buyerToken.balanceOf(seller.address)).to.equal(parseEther('100'));
 		});
 
 		it('should emit TradeConfirmed event', async () => {
-			// const index = await trustMe.getTrade(seller.address, 0);// we only have one trade
 			await buyerToken.connect(buyer).approve(trustMe.address, parseEther('100'));
-			const confirmTrade = await trustMe.connect(buyer).closeTrade(seller.address, 0);
-			confirmTrade.wait();
+			const confirmTrade = await trustMe.connect(buyer).confirmTrade(seller.address, 0);
 			await expect(confirmTrade).to.emit(trustMe, 'TradeConfirmed').withArgs(seller.address, buyer.address);
 		});
 
 		it('should revert if incorrect buyer', async () => {
-			// const index = await trustMe.getLatestTradeIndex(seller.address);
 			await buyerToken.connect(buyer).approve(trustMe.address, parseEther('100'));
-			expect(trustMe.connect(contractsDeployer).closeTrade(seller.address, 0)).to.be.revertedWithCustomError(
+			expect(trustMe.connect(contractsDeployer).confirmTrade(seller.address, 0)).to.be.revertedWithCustomError(
 				trustMe,
 				'OnlyBuyer'
 			);
 		});
 
 		it('should revert if deadline is expired', async () => {
-			// const index = await trustMe.getLatestTradeIndex(seller.address);
 			await buyerToken.connect(buyer).approve(trustMe.address, parseEther('100'));
 			await time.increase(601);
-			expect(trustMe.connect(buyer).closeTrade(seller.address, 0)).to.be.revertedWithCustomError(
+			expect(trustMe.connect(buyer).confirmTrade(seller.address, 0)).to.be.revertedWithCustomError(
 				trustMe,
 				'TradeIsExpired'
 			);
 		});
 
-		it("Should delete trade from user's trade array after trade is confirmed", async () => {
+		it('Should update trade status to confirmed after trade is confirmed', async () => {
 			await buyerToken.connect(buyer).approve(trustMe.address, parseEther('100'));
-			const confirmTrade = await trustMe.connect(buyer).closeTrade(seller.address, 0);
-			confirmTrade.wait();
-			expect(await trustMe.getTrades(seller.address)).to.be.revertedWithPanic;
+			await trustMe.connect(buyer).confirmTrade(seller.address, 0);
+			const trade = await trustMe.getTrade(seller.address, 0);
+			expect(trade.status).to.equal(1); // 1 = confirmed in TradeStatus enum
 		});
 	});
 
 	describe('cancelTrade functionality', () => {
 		beforeEach(async () => {
 			await sellerToken.connect(seller).approve(trustMe.address, parseEther('100'));
-			const addTrade = await trustMe.connect(seller).addTrade(
+			await trustMe.connect(seller).addTrade(
 				buyer.address,
 				sellerToken.address,
 				buyerToken.address,
 				parseEther('100'),
 				parseEther('100'),
-				600 // 10 mins deadline
+				600 // 10 mins tradePeriod
 			);
-
-			addTrade.wait();
 		});
 		it('Should revert if not seller', async () => {
 			expect(trustMe.connect(buyer).cancelTrade(0)).to.be.revertedWithCustomError(trustMe, 'OnlySeller');
@@ -253,19 +252,17 @@ describe('TrustMe', () => {
 		});
 		it('Should refund seller', async () => {
 			const balanceBefore = await sellerToken.balanceOf(seller.address);
-			const cancelTrade = await trustMe.connect(seller).cancelTrade(0);
-			cancelTrade.wait();
+			await trustMe.connect(seller).cancelTrade(0);
 			const balanceAfter = await sellerToken.balanceOf(seller.address);
 			expect(balanceAfter).to.eq(balanceBefore.add(parseEther('100')));
 		});
 		it('Should emit TradeCancelled event', async () => {
 			const cancelTrade = await trustMe.connect(seller).cancelTrade(0);
-			cancelTrade.wait();
 			await expect(cancelTrade)
 				.to.emit(trustMe, 'TradeCanceled')
 				.withArgs(seller.address, buyer.address, sellerToken.address, buyerToken.address);
 		});
-		it("Should delete trade from user's trade array and address from sellerAddresses array after trade is cancelled", async () => {
+		it('Should update trade status to Canceled after trade is cancelled', async () => {
 			await sellerToken.connect(seller).approve(trustMe.address, parseEther('900'));
 			const equalToken = 900 / 9;
 
@@ -280,14 +277,9 @@ describe('TrustMe', () => {
 				);
 			}
 
-			const userToTradeLengthBefore = (await trustMe.getTrades(seller.address)).length;
-			const sellerAddressesLengthBefore = (await trustMe.getSellersAddress()).length;
 			await trustMe.connect(seller).cancelTrade(1);
-			const userToTradeLengthAfter = (await trustMe.getTrades(seller.address)).length;
-			const sellerAddressesLengthAfter = (await trustMe.getSellersAddress()).length;
-
-			expect(userToTradeLengthAfter).to.eq(userToTradeLengthBefore - 1);
-			expect(sellerAddressesLengthAfter).to.eq(sellerAddressesLengthBefore - 1);
+			const trade = await trustMe.getTrade(seller.address, 1);
+			expect(trade.status).to.equal(2); // 2 = Cancelled
 		});
 	});
 	/************************
@@ -329,29 +321,28 @@ describe('TrustMe', () => {
 	});
 
 	describe('PerformUpkeep', () => {
-		it('emit TokensWithdrawn event after time has passed', async () => {
+		// it('emit TokensWithdrawn event after time has passed', async () => {
+		// 	await sellerToken.connect(seller).approve(trustMe.address, parseEther('100'));
+		// 	await trustMe
+		// 		.connect(seller)
+		// 		.addTrade(
+		// 			buyer.address,
+		// 			sellerToken.address,
+		// 			buyerToken.address,
+		// 			parseEther('100'),
+		// 			parseEther('100'),
+		// 			600
+		// 		);
+
+		// 	await ethers.provider.send('evm_increaseTime', [600]);
+		// 	await ethers.provider.send('evm_mine', []);
+		// 	const tx = await trustMe.performUpkeep('0x');
+		// 	expect(tx).to.emit(trustMe, 'TokensWithdrawn');
+		// });
+
+		it('Should set isAvailableToWithdraw true for specific trade if time passed', async () => {
 			await sellerToken.connect(seller).approve(trustMe.address, parseEther('100'));
-			await trustMe
-				.connect(seller)
-				.addTrade(
-					buyer.address,
-					sellerToken.address,
-					buyerToken.address,
-					parseEther('100'),
-					parseEther('100'),
-					600
-				);
 
-			await ethers.provider.send('evm_increaseTime', [600]);
-			await ethers.provider.send('evm_mine', []);
-			const tx = await trustMe.performUpkeep('0x');
-			expect(tx).to.emit(trustMe, 'TokensWithdrawn');
-		});
-
-		it('Should Withdraw token if time passed and update seller balance', async () => {
-			await sellerToken.connect(seller).approve(trustMe.address, parseEther('100'));
-
-			const tokenBefore = await sellerToken.balanceOf(seller.address);
 			await trustMe
 				.connect(seller)
 				.addTrade(
@@ -365,12 +356,10 @@ describe('TrustMe', () => {
 			await ethers.provider.send('evm_increaseTime', [601]);
 			await ethers.provider.send('evm_mine', []);
 			await trustMe.performUpkeep('0x');
-
-			const tokenAfter = await sellerToken.balanceOf(seller.address);
-			expect(tokenBefore).to.eq(tokenAfter);
+			const trade = await trustMe.getTrade(seller.address, 0);
+			expect(trade.isAvailableToWithdraw).to.be.true;
 		});
-		it('Should withdrawn token from multiple trade if time passed', async () => {
-			const tokenBefore = await sellerToken.balanceOf(seller.address);
+		it('Should set isAvailableToWithdraw true for multiple trade if time passed', async () => {
 			for (let i = 0; i < 3; i++) {
 				await sellerToken.connect(seller).approve(trustMe.address, parseEther('100'));
 				await trustMe
@@ -388,10 +377,115 @@ describe('TrustMe', () => {
 			await ethers.provider.send('evm_mine', []);
 			for (let i = 0; i < 3; i++) {
 				await trustMe.performUpkeep('0x');
+				expect((await trustMe.getTrade(seller.address, i)).isAvailableToWithdraw).to.be.true;
 			}
+		});
+		it('Should revert with upkeepNotNeeded if someone call performUpkeep before time passed', async () => {
+			await expect(trustMe.performUpkeep('0x')).to.be.revertedWithCustomError(trustMe, 'UpkeepNotNeeded');
+		});
+	});
 
-			const tokenAfter = await sellerToken.balanceOf(seller.address);
-			expect(tokenBefore).to.eq(tokenAfter);
+	describe('WithdrawTokens', () => {
+		beforeEach(async () => {
+			await sellerToken.connect(seller).approve(trustMe.address, parseEther('100'));
+			await trustMe
+				.connect(seller)
+				.addTrade(
+					buyer.address,
+					sellerToken.address,
+					buyerToken.address,
+					parseEther('100'),
+					parseEther('100'),
+					600
+				);
+		});
+		it('Should withdraw tokens from contract to seller', async () => {
+			await ethers.provider.send('evm_increaseTime', [601]);
+			await ethers.provider.send('evm_mine', []);
+			await trustMe.performUpkeep('0x');
+			const sellerBalanceBefore = await sellerToken.balanceOf(seller.address);
+			await trustMe.connect(seller).withdrawToken(seller.address, 0);
+			const sellerBalanceAfter = await sellerToken.balanceOf(seller.address);
+			expect(sellerBalanceAfter.sub(sellerBalanceBefore)).to.equal(parseEther('100'));
+		});
+		it('Should withdraw tokens from contract to seller for multiple trades', async () => {
+			for (let i = 0; i < 3; i++) {
+				await sellerToken.connect(seller).approve(trustMe.address, parseEther('100'));
+				await trustMe
+					.connect(seller)
+					.addTrade(
+						buyer.address,
+						sellerToken.address,
+						buyerToken.address,
+						parseEther('100'),
+						parseEther('100'),
+						600
+					);
+			}
+			await ethers.provider.send('evm_increaseTime', [601]);
+			await ethers.provider.send('evm_mine', []);
+			for (let i = 0; i < 3; i++) {
+				await trustMe.performUpkeep('0x');
+				const sellerBalanceBefore = await sellerToken.balanceOf(seller.address);
+				await trustMe.connect(seller).withdrawToken(seller.address, i);
+				const sellerBalanceAfter = await sellerToken.balanceOf(seller.address);
+				expect(sellerBalanceAfter.sub(sellerBalanceBefore)).to.equal(parseEther('100'));
+			}
+		});
+		it('Should set isAvailableToWithdraw to false after withdrawing tokens', async () => {
+			await sellerToken.connect(seller).approve(trustMe.address, parseEther('100'));
+			await trustMe
+				.connect(seller)
+				.addTrade(
+					buyer.address,
+					sellerToken.address,
+					buyerToken.address,
+					parseEther('100'),
+					parseEther('100'),
+					600
+				);
+			await ethers.provider.send('evm_increaseTime', [601]);
+			await ethers.provider.send('evm_mine', []);
+			await trustMe.performUpkeep('0x');
+			await trustMe.connect(seller).withdrawToken(seller.address, 0);
+			expect((await trustMe.getTrade(seller.address, 0)).isAvailableToWithdraw).to.be.false;
+		});
+		it("Should update status to 'Withdrawn' after withdrawing tokens", async () => {
+			await sellerToken.connect(seller).approve(trustMe.address, parseEther('100'));
+			await trustMe
+				.connect(seller)
+				.addTrade(
+					buyer.address,
+					sellerToken.address,
+					buyerToken.address,
+					parseEther('100'),
+					parseEther('100'),
+					600
+				);
+			await ethers.provider.send('evm_increaseTime', [601]);
+			await ethers.provider.send('evm_mine', []);
+			await trustMe.performUpkeep('0x');
+			await trustMe.connect(seller).withdrawToken(seller.address, 0);
+			expect((await trustMe.getTrade(seller.address, 0)).status).to.equal(4); // 4 = Withdrawn in TradeStatus enum
+		});
+		it('Should revert with upkeepNotNeeded if someone call performUpkeep before time passed', async () => {
+			await expect(trustMe.performUpkeep('0x')).to.be.revertedWithCustomError(trustMe, 'UpkeepNotNeeded');
+		});
+		it('Should revert with CannotWithdrawTimeNotPassed if seller calls withdraw before time', async () => {
+			await expect(trustMe.connect(seller).withdrawToken(seller.address, 0)).to.be.revertedWithCustomError(
+				trustMe,
+				'CannotWithdrawTimeNotPassed'
+			);
+		});
+
+		it('Should revert with onlySeller if buyer calls withdraw', async () => {
+			await ethers.provider.send('evm_increaseTime', [601]);
+			await ethers.provider.send('evm_mine', []);
+			await trustMe.performUpkeep('0x');
+			await expect(trustMe.connect(buyer).withdrawToken(seller.address, 0)).to.be.revertedWithCustomError(
+				trustMe,
+				'OnlySeller'
+			);
 		});
 	});
 });
