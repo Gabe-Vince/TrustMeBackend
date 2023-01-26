@@ -1,10 +1,11 @@
 import {SignerWithAddress} from '@nomiclabs/hardhat-ethers/signers';
 import {expect} from 'chai';
 import {Signer} from 'ethers';
-import {parseEther} from 'ethers/lib/utils';
+import {formatEther, id, parseEther} from 'ethers/lib/utils';
 import {deployments, ethers} from 'hardhat';
 import {BuyerToken, SellerToken, TrustMe} from '../../typechain';
 import {time} from '@nomicfoundation/hardhat-network-helpers';
+import {log} from 'console';
 describe('TrustMe', () => {
 	let signers: SignerWithAddress[];
 	let trustMe: TrustMe;
@@ -264,41 +265,133 @@ describe('TrustMe', () => {
 				.to.emit(trustMe, 'TradeCanceled')
 				.withArgs(seller.address, buyer.address, sellerToken.address, buyerToken.address);
 		});
-		it("Should delete trade from user's trade array after trade is cancelled", async () => {
-			await sellerToken.connect(seller).approve(trustMe.address, parseEther('200'));
-			const addTrade = await trustMe.connect(seller).addTrade(
-				buyer.address,
-				sellerToken.address,
-				buyerToken.address,
-				parseEther('200'),
-				parseEther('200'),
-				600 // 10 mins deadline
-			);
-			await sellerToken.connect(seller).approve(trustMe.address, parseEther('300'));
-			const addTrade2 = await trustMe.connect(seller).addTrade(
-				buyer.address,
-				sellerToken.address,
-				buyerToken.address,
-				parseEther('300'),
-				parseEther('300'),
-				600 // 10 mins deadline
-			);
-			console.log(
-				'Trade:',
-				await trustMe.getTrades(seller.address),
-				'Trade Length:',
-				(await trustMe.getTrades(seller.address)).length
-			);
+		it("Should delete trade from user's trade array and address from sellerAddresses array after trade is cancelled", async () => {
+			await sellerToken.connect(seller).approve(trustMe.address, parseEther('900'));
+			const equalToken = 900 / 9;
 
-			const cancelTrade = await trustMe.connect(seller).cancelTrade(1);
-			console.log(
-				'Trade:',
-				await trustMe.getTrades(seller.address),
-				'Trade Length:',
-				(await trustMe.getTrades(seller.address)).length
-			);
-			cancelTrade.wait();
-			// expect(await (await trustMe.getTrades(contractsDeployer.address)).length).to.eq(0);
+			for (let i = 0; i < 9; i++) {
+				await trustMe.connect(seller).addTrade(
+					buyer.address,
+					sellerToken.address,
+					buyerToken.address,
+					parseEther(equalToken.toString()),
+					parseEther(equalToken.toString()),
+					600 // 10 mins deadline
+				);
+			}
+
+			const userToTradeLengthBefore = (await trustMe.getTrades(seller.address)).length;
+			const sellerAddressesLengthBefore = (await trustMe.getSellersAddress()).length;
+			await trustMe.connect(seller).cancelTrade(1);
+			const userToTradeLengthAfter = (await trustMe.getTrades(seller.address)).length;
+			const sellerAddressesLengthAfter = (await trustMe.getSellersAddress()).length;
+
+			expect(userToTradeLengthAfter).to.eq(userToTradeLengthBefore - 1);
+			expect(sellerAddressesLengthAfter).to.eq(sellerAddressesLengthBefore - 1);
+		});
+	});
+	/************************
+	 * CHAINLINK AUTOMATION *
+	 ************************/
+	describe('CheckUpkeep', () => {
+		it('Should return upkeepNeeded as true if time has passed', async () => {
+			await sellerToken.connect(seller).approve(trustMe.address, parseEther('100'));
+			await trustMe
+				.connect(seller)
+				.addTrade(
+					buyer.address,
+					sellerToken.address,
+					buyerToken.address,
+					parseEther('100'),
+					parseEther('100'),
+					600
+				);
+			await ethers.provider.send('evm_increaseTime', [601]);
+			await ethers.provider.send('evm_mine', []);
+			const {upkeepNeeded} = await trustMe.callStatic.checkUpkeep('0x');
+			expect(upkeepNeeded).to.be.true;
+		});
+		it('Should return upkeepNeeded as false if time has not passed', async () => {
+			await sellerToken.connect(seller).approve(trustMe.address, parseEther('100'));
+			await trustMe
+				.connect(seller)
+				.addTrade(
+					buyer.address,
+					sellerToken.address,
+					buyerToken.address,
+					parseEther('100'),
+					parseEther('100'),
+					600
+				);
+			const {upkeepNeeded} = await trustMe.callStatic.checkUpkeep('0x');
+			expect(upkeepNeeded).to.be.false;
+		});
+	});
+
+	describe('PerformUpkeep', () => {
+		it('emit TokensWithdrawn event after time has passed', async () => {
+			await sellerToken.connect(seller).approve(trustMe.address, parseEther('100'));
+			await trustMe
+				.connect(seller)
+				.addTrade(
+					buyer.address,
+					sellerToken.address,
+					buyerToken.address,
+					parseEther('100'),
+					parseEther('100'),
+					600
+				);
+
+			await ethers.provider.send('evm_increaseTime', [600]);
+			await ethers.provider.send('evm_mine', []);
+			const tx = await trustMe.performUpkeep('0x');
+			expect(tx).to.emit(trustMe, 'TokensWithdrawn');
+		});
+
+		it('Should Withdraw token if time passed and update seller balance', async () => {
+			await sellerToken.connect(seller).approve(trustMe.address, parseEther('100'));
+
+			const tokenBefore = await sellerToken.balanceOf(seller.address);
+			await trustMe
+				.connect(seller)
+				.addTrade(
+					buyer.address,
+					sellerToken.address,
+					buyerToken.address,
+					parseEther('100'),
+					parseEther('100'),
+					600
+				);
+			await ethers.provider.send('evm_increaseTime', [601]);
+			await ethers.provider.send('evm_mine', []);
+			await trustMe.performUpkeep('0x');
+
+			const tokenAfter = await sellerToken.balanceOf(seller.address);
+			expect(tokenBefore).to.eq(tokenAfter);
+		});
+		it('Should withdrawn token from multiple trade if time passed', async () => {
+			const tokenBefore = await sellerToken.balanceOf(seller.address);
+			for (let i = 0; i < 3; i++) {
+				await sellerToken.connect(seller).approve(trustMe.address, parseEther('100'));
+				await trustMe
+					.connect(seller)
+					.addTrade(
+						buyer.address,
+						sellerToken.address,
+						buyerToken.address,
+						parseEther('100'),
+						parseEther('100'),
+						600
+					);
+			}
+			await ethers.provider.send('evm_increaseTime', [601]);
+			await ethers.provider.send('evm_mine', []);
+			for (let i = 0; i < 3; i++) {
+				await trustMe.performUpkeep('0x');
+			}
+
+			const tokenAfter = await sellerToken.balanceOf(seller.address);
+			expect(tokenBefore).to.eq(tokenAfter);
 		});
 	});
 });
