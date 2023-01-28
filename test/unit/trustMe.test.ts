@@ -327,44 +327,94 @@ describe('TrustMe', () => {
 			// console.log(pendingTradesAfter);
 			expect(pendingTradesAfter.length).to.equal(3);
 		});
-		/************************
-		 * CHAINLINK AUTOMATION *
-		 ************************/
+	});
+	/************************
+	 * CHAINLINK AUTOMATION *
+	 ************************/
 
-		describe('checkExpiredTrades functionality', () => {
-			beforeEach(async () => {
-				await sellerToken.connect(seller).approve(trustMe.address, parseEther('300'));
-				await trustMe.connect(seller).addTrade(
-					buyer.address,
-					sellerToken.address,
-					buyerToken.address,
-					parseEther('100'),
-					parseEther('100'),
-					1800 // 30 mins tradePeriod
-				);
-				await trustMe.connect(seller).addTrade(
-					buyer.address,
-					sellerToken.address,
-					buyerToken.address,
-					parseEther('200'),
-					parseEther('200'),
-					3600 // 1 hour tradePeriod
-				);
-			});
-			it('Should change trade.status to expired if deadline has expired', async () => {
-				await ethers.provider.send('evm_increaseTime', [3600]);
-				await ethers.provider.send('evm_mine', []);
-				const trade1 = await trustMe.getTrade(0);
-				const statusBefore = trade1.status;
-				console.log(statusBefore);
-				await trustMe.callStatic.checkExpiredTrades();
-				const statusAfter = (await trustMe.getTrade(0)).status;
-				console.log(statusAfter);
+	describe('checkExpiredTrades functionality', () => {
+		beforeEach(async () => {
+			await sellerToken.connect(seller).approve(trustMe.address, parseEther('300'));
+			await trustMe.connect(seller).addTrade(
+				buyer.address,
+				sellerToken.address,
+				buyerToken.address,
+				parseEther('100'),
+				parseEther('100'),
+				1800 // 30 mins tradePeriod
+			);
+			await trustMe.connect(seller).addTrade(
+				buyer.address,
+				sellerToken.address,
+				buyerToken.address,
+				parseEther('200'),
+				parseEther('200'),
+				3600 // 1 hour tradePeriod
+			);
+		});
+		it('Should change trade.status to expired if deadline has expired', async () => {
+			await time.increase(1801);
+			const trade1 = await trustMe.getTrade(0);
+			const statusBefore = trade1.status;
+			await trustMe.checkExpiredTrades();
+			const statusAfter = trade1.status;
+			const trade2 = await trustMe.getTrade(1);
 
-				const trade2 = await trustMe.getTrade(1);
+			expect(await (await trustMe.getTrade(0)).status).to.equal(3); // 3 = Expired
+			expect(await (await trustMe.getTrade(1)).status).to.equal(0); // 1 = Pending
+		});
 
-				expect(trade1.status).to.equal(3); // 3 = Expired
-			});
+		it("Should remove trade from pendingTrades array if trade's deadline has expired", async () => {
+			await ethers.provider.send('evm_increaseTime', [1801]);
+			await ethers.provider.send('evm_mine', []);
+			const pendingTradesBefore = await trustMe.getPendingTradesIDs();
+
+			await trustMe.checkExpiredTrades();
+
+			const pendingTradesAfter = await trustMe.getPendingTradesIDs();
+
+			expect(pendingTradesAfter.length).to.equal(1);
+		});
+
+		it('Should emit TradeExpired event if trade deadline has expired', async () => {
+			await time.increase(1801);
+			const tradeExpired = await trustMe.checkExpiredTrades();
+			await expect(tradeExpired).to.emit(trustMe, 'TradeExpired').withArgs(0, seller.address, buyer.address);
+		});
+	});
+	describe('withdraw functionailty', () => {
+		beforeEach(async () => {
+			await sellerToken.connect(seller).approve(trustMe.address, parseEther('300'));
+			await trustMe.connect(seller).addTrade(
+				buyer.address,
+				sellerToken.address,
+				buyerToken.address,
+				parseEther('100'),
+				parseEther('100'),
+				1800 // 30 mins tradePeriod
+			);
+			await trustMe.connect(seller).addTrade(
+				buyer.address,
+				sellerToken.address,
+				buyerToken.address,
+				parseEther('200'),
+				parseEther('200'),
+				3600 // 1 hour tradePeriod
+			);
+			await time.increase(1801);
+			await trustMe.checkExpiredTrades();
+		});
+		it('Should revert if trade is not expired', async () => {
+			await expect(trustMe.connect(seller).withdraw(1)).to.be.revertedWithCustomError(
+				trustMe,
+				'TradeIsNotExpired'
+			);
+		});
+		it("Should withdraw seller's tokens if trade is expired", async () => {
+			const sellerBalanceBefore = await sellerToken.balanceOf(seller.address);
+			await trustMe.connect(seller).withdraw(0);
+			const sellerBalanceAfter = await sellerToken.balanceOf(seller.address);
+			expect(sellerBalanceAfter.sub(sellerBalanceBefore)).to.equal(parseEther('100'));
 		});
 	});
 });

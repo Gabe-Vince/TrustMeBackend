@@ -155,7 +155,7 @@ contract TrustMe {
 
 	function checkExpiredTrades() external {
 		for (uint i = 0; i < pendingTradesIDs.length; i++) {
-			Trade memory trade = tradeIDToTrade[pendingTradesIDs[i]];
+			Trade storage trade = tradeIDToTrade[pendingTradesIDs[i]];
 			if (trade.deadline <= block.timestamp) {
 				trade.status = TradeStatus.Expired;
 				removePendingTrade(getPendingTradeIndex(trade.id));
