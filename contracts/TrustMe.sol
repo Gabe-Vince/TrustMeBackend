@@ -4,7 +4,7 @@ pragma solidity ^0.8.17;
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "hardhat/console.sol";
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
-import "@chainlink/contracts/src/v0.8/AutomationCompatible.sol";
+import "@openzeppelin/contracts/utils/Counters.sol";
 
 error InvalidAddress();
 error CannotTradeSameToken();
@@ -19,9 +19,12 @@ error TradeIsExpired();
 error InsufficientAllowance();
 error UpkeepNotNeeded();
 error CannotWithdrawTimeNotPassed();
+error TradeIsNotExpired();
 
-contract TrustMe is AutomationCompatible {
+contract TrustMe {
 	using SafeERC20 for IERC20;
+	using Counters for Counters.Counter;
+
 	/*********
 	 * TYPES *
 	 *********/
@@ -34,6 +37,7 @@ contract TrustMe is AutomationCompatible {
 	}
 
 	struct Trade {
+		uint256 id;
 		address seller;
 		address buyer;
 		address tokenToSell;
@@ -41,32 +45,30 @@ contract TrustMe is AutomationCompatible {
 		uint256 amountOfTokenToSell;
 		uint256 amountOfTokenToBuy;
 		uint256 deadline;
-		bool isAvailableToWithdraw;
 		TradeStatus status;
 	}
 
 	/**********************
 	 *  STATE VARIABLES *
 	 **********************/
-	mapping(address => Trade[]) public userToTrades;
-	address[] private sellerAddresses;
+
+	mapping(address => uint256[]) public userToTradesIDs;
+
+	mapping(uint256 => Trade) public tradeIDToTrade;
+
+	Counters.Counter private _tradeId;
+
+	uint256[] public pendingTradesIDs;
 
 	/**********
 	 * EVENTS *
 	 **********/
-	event TradeCreated(
-		address indexed seller,
-		address indexed buyer,
-		address tokenToSell,
-		address tokenToBuy,
-		uint256 amountOfTokenToSell,
-		uint256 amountOfTokenToBuy,
-		uint deadline
-	);
-	event TradeConfirmed(address indexed seller, address indexed buyer);
-	event TradeExpired(address indexed seller, address indexed buyer);
-	event TradeCanceled(address indexed seller, address indexed buyer, address tokenToSell, address tokenToBuy);
-	event TokensWithdrawn(address indexed seller, uint tradeIndex);
+	event TradeCreated(uint256 indexed tradeID, address indexed seller, address indexed buyer);
+
+	event TradeConfirmed(uint256 indexed tradeID, address indexed seller, address indexed buyer);
+	event TradeExpired(uint256 indexed tradeID, address indexed seller, address indexed buyer);
+	event TradeCanceled(uint256 indexed tradeID, address indexed seller, address indexed buyer);
+	event TradeWithdrawn(uint256 indexed tradeID, address indexed seller, address indexed buyer);
 
 	/***************
 	 * MODIFIERS *
@@ -90,35 +92,6 @@ contract TrustMe is AutomationCompatible {
 		_;
 	}
 
-	modifier validateCloseTrade(address seller, uint256 index) {
-		Trade memory trade = userToTrades[seller][index];
-		if (trade.buyer != msg.sender) revert OnlyBuyer();
-		if (trade.status != TradeStatus.Pending) revert TradeIsNotPending(); //Do we need to check this?
-		if (trade.deadline < block.timestamp) revert TradeIsExpired();
-		IERC20 token = IERC20(trade.tokenToBuy);
-		if (token.allowance(msg.sender, address(this)) < trade.amountOfTokenToBuy) revert InsufficientAllowance();
-		if (token.balanceOf(msg.sender) < trade.amountOfTokenToBuy) revert InsufficientBalance();
-		_;
-	}
-
-	modifier validateCancelTrade(uint index) {
-		Trade memory trade = userToTrades[msg.sender][index];
-		if (trade.seller != msg.sender) revert OnlySeller();
-		if (trade.status != TradeStatus.Pending) revert TradeIsNotPending();
-		if (trade.deadline < block.timestamp) revert TradeIsExpired();
-		_;
-	}
-
-	/**
-	 *@dev  Create Trade to initialize a trade as a seller
-	 *@param _buyer address of the buyer
-	 *@param _tokenToSell address of the token to sell
-	 *@param _tokenToBuy address of the token to buy
-	 *@param _amountOfTokenToSell amount of token to sell
-	 *@param _amountOfTokenToBuy amount of token to buy
-	 *@param  _tradePeriod duration of trade
-	 */
-
 	function addTrade(
 		address _buyer,
 		address _tokenToSell,
@@ -127,115 +100,119 @@ contract TrustMe is AutomationCompatible {
 		uint256 _amountOfTokenToBuy,
 		uint256 _tradePeriod
 	) external validateAddTrade(_buyer, _tokenToSell, _tokenToBuy, _amountOfTokenToSell, _amountOfTokenToBuy) {
-		uint tradePeriod = block.timestamp + _tradePeriod;
+		uint deadline = block.timestamp + _tradePeriod;
 		IERC20 token = IERC20(_tokenToSell);
 		token.safeTransferFrom(msg.sender, address(this), _amountOfTokenToSell);
+
 		Trade memory trade = Trade(
+			_tradeId.current(),
 			msg.sender,
 			_buyer,
 			_tokenToSell,
 			_tokenToBuy,
 			_amountOfTokenToSell,
 			_amountOfTokenToBuy,
-			tradePeriod,
-			false,
+			deadline,
 			TradeStatus.Pending
 		);
 
-		userToTrades[msg.sender].push(trade);
-		sellerAddresses.push(msg.sender);
+		tradeIDToTrade[_tradeId.current()] = trade;
+		userToTradesIDs[msg.sender].push(_tradeId.current());
+		userToTradesIDs[_buyer].push(_tradeId.current());
+		pendingTradesIDs.push(_tradeId.current());
 
-		emit TradeCreated(
-			msg.sender,
-			_buyer,
-			_tokenToSell,
-			_tokenToBuy,
-			_amountOfTokenToSell,
-			_amountOfTokenToBuy,
-			tradePeriod
-		);
+		emit TradeCreated(_tradeId.current(), msg.sender, _buyer);
+		_tradeId.increment();
 	}
 
-	function confirmTrade(address seller, uint256 index) external validateCloseTrade(seller, index) {
-		Trade storage trade = userToTrades[seller][index];
-
+	function confirmTrade(uint256 _tradeID) external {
+		Trade memory trade = tradeIDToTrade[_tradeID];
+		if (trade.status != TradeStatus.Pending) revert TradeIsNotPending();
+		if (trade.buyer != msg.sender) revert OnlyBuyer();
+		if (trade.deadline < block.timestamp) revert TradeIsExpired();
+		if (IERC20(trade.tokenToBuy).allowance(msg.sender, address(this)) < trade.amountOfTokenToBuy)
+			revert InsufficientAllowance();
 		IERC20(trade.tokenToBuy).safeTransferFrom(msg.sender, trade.seller, trade.amountOfTokenToBuy);
 		IERC20(trade.tokenToSell).safeTransfer(trade.buyer, trade.amountOfTokenToSell);
 		trade.status = TradeStatus.Confirmed;
-		emit TradeConfirmed(seller, msg.sender);
+		removePendingTrade(getPendingTradeIndex(trade.id));
+		tradeIDToTrade[_tradeID] = trade;
+		emit TradeConfirmed(trade.id, trade.seller, trade.buyer);
 	}
 
-	function cancelTrade(uint256 index) external validateCancelTrade(index) {
-		Trade storage trade = userToTrades[msg.sender][index];
+	function cancelTrade(uint256 _tradeID) external {
+		Trade memory trade = tradeIDToTrade[_tradeID];
+		if (trade.status != TradeStatus.Pending) revert TradeIsNotPending();
+		if (trade.seller != msg.sender) revert OnlySeller();
+		if (trade.deadline < block.timestamp) revert TradeIsExpired();
+		IERC20(trade.tokenToSell).safeTransfer(trade.seller, trade.amountOfTokenToSell);
 		trade.status = TradeStatus.Canceled;
-		IERC20(trade.tokenToSell).transfer(trade.seller, trade.amountOfTokenToSell);
-		emit TradeCanceled(msg.sender, trade.buyer, trade.tokenToSell, trade.tokenToBuy);
+		removePendingTrade(getPendingTradeIndex(trade.id));
+		tradeIDToTrade[_tradeID] = trade;
+
+		emit TradeCanceled(trade.id, trade.seller, trade.buyer);
 	}
 
-	function withdrawToken(address seller, uint index) public {
-		if (msg.sender != seller) revert OnlySeller();
-		Trade memory trade = userToTrades[seller][index];
-		if (trade.isAvailableToWithdraw == false) revert CannotWithdrawTimeNotPassed();
-		IERC20(trade.tokenToSell).safeTransfer(seller, trade.amountOfTokenToSell);
-		userToTrades[seller][index].isAvailableToWithdraw = false;
-		userToTrades[seller][index].status = TradeStatus.Withdrawn;
-		emit TokensWithdrawn(msg.sender, trade.amountOfTokenToSell);
-	}
-
-	/************************
-	 * CHAINLINK AUTOMATION *
-	 ************************/
-
-	function checkUpkeep(
-		bytes memory /*checkData*/
-	) public override returns (bool upkeepNeeded, bytes memory performData) {
-		for (uint i = 0; i < sellerAddresses.length; i++) {
-			address sellerAddress = sellerAddresses[i];
-			Trade storage trade = userToTrades[sellerAddress][i];
-			if (
-				trade.deadline <= block.timestamp &&
-				trade.status == TradeStatus.Pending &&
-				trade.seller == sellerAddress
-			) {
-				trade.isAvailableToWithdraw = true;
-				upkeepNeeded = true;
-				performData = abi.encode(sellerAddress, i);
+	function checkExpiredTrades() external {
+		for (uint i = 0; i < pendingTradesIDs.length; i++) {
+			Trade memory trade = tradeIDToTrade[pendingTradesIDs[i]];
+			if (trade.deadline <= block.timestamp) {
+				trade.status = TradeStatus.Expired;
+				removePendingTrade(getPendingTradeIndex(trade.id));
+				emit TradeExpired(trade.id, trade.seller, trade.buyer);
 			}
 		}
 	}
 
-	/**
-	 *@dev Perform Upkeep to withdraw tokens from contract
-	 *@dev This is called by the Chainlink Keeper Network if checkUpkeep returns true or someone can manully call it if checkUpkeep is true
-	 */
-	function performUpkeep(
-		bytes calldata /*performData*/
-	) external override {
-		(bool upkeepNeeded, bytes memory performData) = checkUpkeep("");
-		if (!upkeepNeeded) revert UpkeepNotNeeded();
-		(address sellerAddress, uint256 index) = abi.decode(performData, (address, uint256));
-		Trade storage _trade = userToTrades[sellerAddress][index];
-		_trade.isAvailableToWithdraw = true;
-		// withdrawToken(sellerAddress, index); //! we can either directly transfer the tokens here or let the seller manually withdraw them
+	function removePendingTrade(uint256 index) internal {
+		if (index >= pendingTradesIDs.length) return;
+
+		for (uint i = index; i < pendingTradesIDs.length - 1; i++) {
+			pendingTradesIDs[i] = pendingTradesIDs[i + 1];
+		}
+		pendingTradesIDs.pop();
+	}
+
+	function withdraw(uint256 _tradeID) external {
+		Trade memory trade = tradeIDToTrade[_tradeID];
+		if (trade.status != TradeStatus.Expired) revert TradeIsNotExpired();
+		if (trade.seller != msg.sender) revert OnlySeller();
+		IERC20(trade.tokenToSell).safeTransfer(trade.seller, trade.amountOfTokenToSell);
+		trade.status = TradeStatus.Withdrawn;
+		tradeIDToTrade[_tradeID] = trade;
+		emit TradeWithdrawn(trade.id, trade.seller, trade.buyer);
 	}
 
 	/***********
 	 * GETTERS *
 	 ***********/
 
-	function getTrades(address userAddress) external view returns (Trade[] memory) {
-		return userToTrades[userAddress];
+	function getTrade(uint256 _tradeID) external view returns (Trade memory) {
+		return tradeIDToTrade[_tradeID];
 	}
 
-	function getTrade(address userAddress, uint256 index) external view returns (Trade memory) {
-		return userToTrades[userAddress][index];
+	function getTradesIDsByUser(address _user) external view returns (uint256[] memory) {
+		return userToTradesIDs[_user];
 	}
 
-	function getLatestTradeIndex(address userAddress) external view returns (uint256) {
-		return userToTrades[userAddress].length - 1;
+	function getPendingTradesIDs() external view returns (uint256[] memory) {
+		return pendingTradesIDs;
 	}
 
-	function getSellersAddress() external view returns (address[] memory) {
-		return sellerAddresses;
+	function getTradeStatus(uint256 _tradeID) external view returns (TradeStatus) {
+		return tradeIDToTrade[_tradeID].status;
+	}
+
+	function getPendingTradeIndex(uint256 _tradeID) internal view returns (uint256) {
+		for (uint i = 0; i < pendingTradesIDs.length; i++) {
+			if (pendingTradesIDs[i] == _tradeID) {
+				return i;
+			}
+		}
+		return pendingTradesIDs.length;
+	}
+
+	function getBlockTimestamp() external view returns (uint256) {
+		return block.timestamp;
 	}
 }
