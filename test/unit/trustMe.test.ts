@@ -195,6 +195,13 @@ describe('TrustMe', () => {
 			expect(trustMe.connect(buyer).confirmTrade(2)).to.be.revertedWithPanic;
 		});
 
+		it('Should revert if allowance is not approved', async () => {
+			await expect(trustMe.connect(buyer).confirmTrade(0)).to.be.revertedWithCustomError(
+				trustMe,
+				'InsufficientAllowance'
+			);
+		});
+
 		it('should trade between the seller and buyer', async () => {
 			// const sellerBalBefore = await (await buyerToken.balanceOf(seller.address)).toNumber();
 			// console.log("Seller's balance", sellerBalBefore);

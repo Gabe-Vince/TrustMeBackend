@@ -211,8 +211,4 @@ contract TrustMe {
 		}
 		return pendingTradesIDs.length;
 	}
-
-	function getBlockTimestamp() external view returns (uint256) {
-		return block.timestamp;
-	}
 }
