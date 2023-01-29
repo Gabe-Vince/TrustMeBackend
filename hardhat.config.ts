@@ -1,6 +1,6 @@
 require('dotenv').config();
 
-import {HardhatUserConfig} from 'hardhat/config';
+import { HardhatUserConfig } from 'hardhat/config';
 import '@nomicfoundation/hardhat-toolbox';
 import 'hardhat-contract-sizer';
 import 'hardhat-deploy';
@@ -25,16 +25,16 @@ const config: HardhatUserConfig = {
 		localhost: {
 			chainId: chainIds.hardhat,
 		},
-		mainnet: {
-			url: ALCHEMY_MAINNET,
-			accounts: [process.env.PRIVATE_KEY || ''],
-			chainId: chainIds.mainnet,
-		},
-		goerli: {
-			url: ALCHEMY_GOERLI,
-			accounts: [process.env.PRIVATE_KEY || ''],
-			chainId: chainIds.goerli,
-		},
+		// mainnet: {
+		// 	url: ALCHEMY_MAINNET,
+		// 	accounts: [process.env.PRIVATE_KEY || ''],
+		// 	chainId: chainIds.mainnet,
+		// },
+		// goerli: {
+		// 	url: ALCHEMY_GOERLI,
+		// 	accounts: [process.env.PRIVATE_KEY || ''],
+		// 	chainId: chainIds.goerli,
+		// },
 	},
 	typechain: {
 		outDir: 'typechain',
