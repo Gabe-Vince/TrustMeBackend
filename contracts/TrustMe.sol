@@ -9,6 +9,7 @@ import "@openzeppelin/contracts/utils/Counters.sol";
 
 error InvalidAddress();
 error CannotTradeSameToken();
+error TokenAndNFTAddressCannotBeEqual();
 error CannotTradeWithSelf();
 error DeadlineShouldBeAtLeast5Minutes();
 error InvalidAmount();
@@ -128,13 +129,20 @@ contract TrustMe is ERC721Holder {
 	) {
 		if (msg.sender == address(0)) revert InvalidAddress();
 		if (_buyer == address(0)) revert InvalidAddress();
-		if (_tokenToSell == address(0)) revert InvalidAddress();
-		if (_tokenToBuy == address(0)) revert InvalidAddress();
+		if (_amountOfTokenToSell > 0 && _tokenToSell == address(0)) revert InvalidAddress();
+		if (_amountOfTokenToBuy > 0 && _tokenToBuy == address(0)) revert InvalidAddress();
 		if (_tokenToSell == _tokenToBuy) revert CannotTradeSameToken();
+		if (_tokenToSell == _addressNFTToBuy) revert CannotTradeSameToken();
+		if (_tokenToSell == _addressNFTToSell) revert TokenAndNFTAddressCannotBeEqual();
+		if (_tokenToBuy == _addressNFTToBuy) revert TokenAndNFTAddressCannotBeEqual();
 		if (msg.sender == _buyer) revert CannotTradeWithSelf();
-		if (_amountOfTokenToSell == 0 && _amountOfETHToSell == 0) revert InvalidAmount(); // changed for ETH
-		if (_amountOfTokenToBuy == 0 && _amountOfETHToBuy == 0) revert InvalidAmount(); // changed for ETH
+		if (_amountOfTokenToSell == 0 && _amountOfETHToSell == 0 && _addressNFTToSell == address(0))
+			revert InvalidAmount();
+		if (_amountOfTokenToBuy == 0 && _amountOfETHToBuy == 0 && _addressNFTToBuy == address(0))
+			revert InvalidAmount();
 		if (IERC20(_tokenToSell).balanceOf(msg.sender) < _amountOfTokenToSell) revert InsufficientBalance();
+		if (_addressNFTToSell != address(0) && IERC721(_addressNFTToSell).ownerOf(_tokenIdNFTToSell) != msg.sender)
+			revert InsufficientBalance();
 
 		// added for ETH
 		if (_amountOfETHToSell > 0 && _amountOfETHToBuy > 0) revert CannotTradeSameToken();
@@ -163,7 +171,11 @@ contract TrustMe is ERC721Holder {
 	{
 		uint deadline = block.timestamp + transactionInput.tradePeriod;
 		IERC20 token = IERC20(transactionInput.tokenToSell);
-		token.safeTransferFrom(msg.sender, address(this), transactionInput.amountOfTokenToSell);
+		IERC721 NFTToSell = IERC721(transactionInput.addressNFTToSell);
+		if (transactionInput.amountOfTokenToSell > 0)
+			token.safeTransferFrom(msg.sender, address(this), transactionInput.amountOfTokenToSell);
+		if (transactionInput.addressNFTToSell != address(0))
+			NFTToSell.safeTransferFrom(msg.sender, address(this), transactionInput.tokenIdNFTToSell);
 
 		// added for ETH
 		tradeIdToETHFromSeller[_tradeId.current()] += msg.value;
@@ -208,8 +220,18 @@ contract TrustMe is ERC721Holder {
 		if (IERC20(trade.tokenToBuy).allowance(msg.sender, address(this)) < trade.amountOfTokenToBuy)
 			revert InsufficientAllowance();
 
+		if (
+			trade.addressNFTToBuy != address(0) &&
+			IERC721(trade.addressNFTToBuy).getApproved(trade.tokenIdNFTToBuy) != address(this)
+		) revert InsufficientAllowance();
+
 		if (IERC20(trade.tokenToSell).balanceOf(address(this)) < trade.amountOfTokenToSell)
 			revert InsufficientBalance(); // NT added extra condition - what if our contract is drained? We don't want the contagion to spread.
+
+		if (
+			trade.addressNFTToSell != address(0) &&
+			IERC721(trade.addressNFTToSell).ownerOf(trade.tokenIdNFTToSell) != address(this)
+		) revert InsufficientBalance();
 
 		// made additions and changes in connection with ETH implementation
 
@@ -222,10 +244,16 @@ contract TrustMe is ERC721Holder {
 		if (trade.amountOfTokenToBuy > 0)
 			IERC20(trade.tokenToBuy).safeTransferFrom(msg.sender, trade.seller, trade.amountOfTokenToBuy);
 
+		if (trade.addressNFTToBuy != address(0))
+			IERC721(trade.addressNFTToBuy).safeTransferFrom(msg.sender, trade.seller, trade.tokenIdNFTToBuy);
+
 		if (trade.amountOfETHToBuy > 0) payable(trade.seller).transfer(msg.value);
 
 		if (trade.amountOfTokenToSell > 0)
 			IERC20(trade.tokenToSell).safeTransfer(trade.buyer, trade.amountOfTokenToSell);
+
+		if (trade.addressNFTToSell != address(0))
+			IERC721(trade.addressNFTToSell).safeTransferFrom(address(this), trade.buyer, trade.tokenIdNFTToSell);
 
 		if (trade.amountOfETHToSell > 0) payable(trade.buyer).transfer(trade.amountOfETHToSell);
 		tradeIdToETHFromSeller[_tradeID] -= trade.amountOfETHToSell;
@@ -251,6 +279,9 @@ contract TrustMe is ERC721Holder {
 		// added for ETH
 		if (trade.amountOfTokenToSell > 0)
 			IERC20(trade.tokenToSell).safeTransfer(trade.seller, trade.amountOfTokenToSell);
+
+		if (trade.addressNFTToSell != address(0))
+			IERC721(trade.addressNFTToSell).safeTransferFrom(address(this), trade.seller, trade.tokenIdNFTToSell);
 
 		if (trade.amountOfETHToSell > 0) payable(trade.seller).transfer(trade.amountOfETHToSell);
 		tradeIdToETHFromSeller[_tradeID] -= trade.amountOfETHToSell;
@@ -297,6 +328,9 @@ contract TrustMe is ERC721Holder {
 
 		if (trade.amountOfTokenToSell > 0)
 			IERC20(trade.tokenToSell).safeTransfer(trade.seller, trade.amountOfTokenToSell);
+
+		if (trade.addressNFTToSell != address(0))
+			IERC721(trade.addressNFTToSell).safeTransferFrom(address(this), trade.seller, trade.tokenIdNFTToSell);
 
 		if (trade.amountOfETHToSell > 0) payable(trade.seller).transfer(trade.amountOfETHToSell);
 		tradeIdToETHFromSeller[_tradeID] -= trade.amountOfETHToSell;
