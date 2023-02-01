@@ -16,7 +16,16 @@ const ALCHEMY_GOERLI = process.env.ALCHEMY_API_KEY_GOERLI || '';
 const ALCHEMY_MAINNET = process.env.ALCHEMY_API_KEY_MAINET || '';
 
 const config: HardhatUserConfig = {
-	solidity: '0.8.17',
+	solidity: {
+		version: '0.8.17',
+		settings: {
+			viaIR: true,
+			optimizer: {
+				enabled: true,
+				runs: 200
+			}
+		}
+	},
 	defaultNetwork: 'hardhat',
 	networks: {
 		hardhat: {

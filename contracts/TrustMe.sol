@@ -3,6 +3,8 @@ pragma solidity ^0.8.17;
 
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
+import "@openzeppelin/contracts/token/ERC721/IERC721.sol";
+import "@openzeppelin/contracts/token/ERC721/utils/ERC721Holder.sol";
 import "@openzeppelin/contracts/utils/Counters.sol";
 
 error InvalidAddress();
@@ -24,7 +26,7 @@ error TradeIsNotExpired();
 // NT error added for ETH implementation
 error IncorrectAmoutOfETHTransferred();
 
-contract TrustMe {
+contract TrustMe is ERC721Holder {
 	using SafeERC20 for IERC20;
 	using Counters for Counters.Counter;
 
@@ -44,7 +46,11 @@ contract TrustMe {
 		address seller;
 		address buyer;
 		address tokenToSell;
+		address addressNFTToSell;
+		uint256 tokenIdNFTToSell;
 		address tokenToBuy;
+		address addressNFTToBuy;
+		uint256 tokenIdNFTToBuy;
 		uint256 amountOfETHToSell;
 		uint256 amountOfTokenToSell;
 		uint256 amountOfETHToBuy;
@@ -58,7 +64,11 @@ contract TrustMe {
 	struct TransactionInput {
 		address buyer;
 		address tokenToSell;
+		address addressNFTToSell;
+		uint256 tokenIdNFTToSell;
 		address tokenToBuy;
+		address addressNFTToBuy;
+		uint256 tokenIdNFTToBuy;
 		uint256 amountOfETHToSell; //added for ETH
 		uint256 amountOfTokenToSell;
 		uint256 amountOfETHToBuy; //added for ETH
@@ -106,7 +116,11 @@ contract TrustMe {
 	modifier validateAddTrade(
 		address _buyer,
 		address _tokenToSell,
+		address _addressNFTToSell,
+		uint256 _tokenIdNFTToSell,
 		address _tokenToBuy,
+		address _addressNFTToBuy,
+		uint256 _tokenIdNFTToBuy,
 		uint256 _amountOfTokenToSell,
 		uint256 _amountOfETHToSell, // added for ETH
 		uint256 _amountOfTokenToBuy,
@@ -136,7 +150,11 @@ contract TrustMe {
 		validateAddTrade(
 			transactionInput.buyer,
 			transactionInput.tokenToSell,
+			transactionInput.addressNFTToSell,
+			transactionInput.tokenIdNFTToSell,
 			transactionInput.tokenToBuy,
+			transactionInput.addressNFTToBuy,
+			transactionInput.tokenIdNFTToBuy,
 			transactionInput.amountOfTokenToSell,
 			transactionInput.amountOfETHToSell,
 			transactionInput.amountOfTokenToBuy,
@@ -155,7 +173,11 @@ contract TrustMe {
 			msg.sender,
 			transactionInput.buyer,
 			transactionInput.tokenToSell,
+			transactionInput.addressNFTToSell,
+			transactionInput.tokenIdNFTToSell,
 			transactionInput.tokenToBuy,
+			transactionInput.addressNFTToBuy,
+			transactionInput.tokenIdNFTToBuy,
 			transactionInput.amountOfETHToSell,
 			transactionInput.amountOfTokenToSell,
 			transactionInput.amountOfETHToBuy,
