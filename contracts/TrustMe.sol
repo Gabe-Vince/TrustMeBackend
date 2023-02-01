@@ -79,7 +79,7 @@ contract TrustMe {
 	uint256[] public pendingTradesIDs;
 
 	// NT - is it necessary to keep track of seller token and ETH balances in contract? I have done so now for ETH;
-	mapping(address => uint) public sellersToContractETHBalance;
+	mapping(uint => uint) public tradeIdToETHFromSeller;
 
 	/**********
 	 * EVENTS *
@@ -148,7 +148,7 @@ contract TrustMe {
 		token.safeTransferFrom(msg.sender, address(this), transactionInput.amountOfTokenToSell);
 
 		// added for ETH
-		sellersToContractETHBalance[msg.sender] += msg.value;
+		tradeIdToETHFromSeller[_tradeId.current()] += msg.value;
 
 		Trade memory trade = Trade(
 			_tradeId.current(),
@@ -194,7 +194,7 @@ contract TrustMe {
 		if (msg.value != trade.amountOfETHToBuy) revert IncorrectAmoutOfETHTransferred();
 		if (
 			address(this).balance < trade.amountOfETHToSell ||
-			sellersToContractETHBalance[trade.seller] < trade.amountOfETHToSell
+			tradeIdToETHFromSeller[_tradeID] < trade.amountOfETHToSell
 		) revert InsufficientBalance();
 
 		if (trade.amountOfTokenToBuy > 0)
@@ -206,7 +206,7 @@ contract TrustMe {
 			IERC20(trade.tokenToSell).safeTransfer(trade.buyer, trade.amountOfTokenToSell);
 
 		if (trade.amountOfETHToSell > 0) payable(trade.buyer).transfer(trade.amountOfETHToSell);
-		sellersToContractETHBalance[trade.seller] -= trade.amountOfETHToSell;
+		tradeIdToETHFromSeller[_tradeID] -= trade.amountOfETHToSell;
 
 		trade.status = TradeStatus.Confirmed;
 		removePendingTrade(getPendingTradeIndex(trade.id));
@@ -221,7 +221,7 @@ contract TrustMe {
 
 		if (
 			address(this).balance < trade.amountOfETHToSell ||
-			sellersToContractETHBalance[trade.seller] < trade.amountOfETHToSell
+			tradeIdToETHFromSeller[_tradeID] < trade.amountOfETHToSell
 		) revert InsufficientBalance(); //added for ETH
 
 		if (trade.deadline < block.timestamp) revert TradeIsExpired(); // NT: should a user be able to cancel a trade even if it is expired, even if only for peace of mind?
@@ -231,7 +231,7 @@ contract TrustMe {
 			IERC20(trade.tokenToSell).safeTransfer(trade.seller, trade.amountOfTokenToSell);
 
 		if (trade.amountOfETHToSell > 0) payable(trade.seller).transfer(trade.amountOfETHToSell);
-		sellersToContractETHBalance[trade.seller] -= trade.amountOfETHToSell;
+		tradeIdToETHFromSeller[_tradeID] -= trade.amountOfETHToSell;
 
 		trade.status = TradeStatus.Canceled;
 		removePendingTrade(getPendingTradeIndex(trade.id));
@@ -270,14 +270,14 @@ contract TrustMe {
 		// added for ETH
 		if (
 			address(this).balance < trade.amountOfETHToSell ||
-			sellersToContractETHBalance[trade.seller] < trade.amountOfETHToSell
+			tradeIdToETHFromSeller[_tradeID] < trade.amountOfETHToSell
 		) revert InsufficientBalance();
 
 		if (trade.amountOfTokenToSell > 0)
 			IERC20(trade.tokenToSell).safeTransfer(trade.seller, trade.amountOfTokenToSell);
 
 		if (trade.amountOfETHToSell > 0) payable(trade.seller).transfer(trade.amountOfETHToSell);
-		sellersToContractETHBalance[trade.seller] -= trade.amountOfETHToSell;
+		tradeIdToETHFromSeller[_tradeID] -= trade.amountOfETHToSell;
 
 		trade.status = TradeStatus.Withdrawn;
 		// tradeIDToTrade[_tradeID] = trade; // NT not nessary if you change trade memory to storage

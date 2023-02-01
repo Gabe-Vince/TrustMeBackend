@@ -294,7 +294,7 @@ describe('TrustMe', () => {
 					tradePeriod: 600 // 10 mins deadline
 				}, { value: parseEther('200') }
 			);
-			const sellersETHBalanceInContract = await trustMe.sellersToContractETHBalance(seller.address);
+			const sellersETHBalanceInContract = await trustMe.tradeIdToETHFromSeller(0);
 
 			expect(sellersETHBalanceInContract).to.equal(parseEther('200'));
 		});
@@ -365,7 +365,7 @@ describe('TrustMe', () => {
 			it('should reduce the sellers ETH balance in the contract by the transferred amount', async () => {
 				await buyerToken.connect(buyer).approve(trustMe.address, parseEther('100'));
 				await trustMe.connect(buyer).confirmTrade(0);
-				expect(await trustMe.sellersToContractETHBalance(seller.address)).to.equal(parseEther('0'));
+				expect(await trustMe.tradeIdToETHFromSeller(0)).to.equal(parseEther('0'));
 			});
 
 			it('should transfer the tokens to buy from buyer to seller', async () => {
@@ -556,9 +556,9 @@ describe('TrustMe', () => {
 		});
 
 		it("Should reduce seller's ETH balance in contract", async () => {
-			const sellerETHBalanceInContractBefore = await trustMe.sellersToContractETHBalance(seller.address);
+			const sellerETHBalanceInContractBefore = await trustMe.tradeIdToETHFromSeller(0);
 			await trustMe.connect(seller).cancelTrade(0);
-			const sellerETHBalanceInContractAfter = await trustMe.sellersToContractETHBalance(seller.address);
+			const sellerETHBalanceInContractAfter = await trustMe.tradeIdToETHFromSeller(0);
 			expect(sellerETHBalanceInContractBefore.sub(sellerETHBalanceInContractAfter)).to.eq(parseEther('200'));
 		});
 
@@ -780,9 +780,9 @@ describe('TrustMe', () => {
 		});
 
 		it("Should reduce seller's ETH balance in contract", async () => {
-			const sellerETHBalanceInContractBefore = await trustMe.sellersToContractETHBalance(seller.address);
+			const sellerETHBalanceInContractBefore = await trustMe.tradeIdToETHFromSeller(0);
 			await trustMe.connect(seller).withdraw(0);
-			const sellerETHBalanceInContractAfter = await trustMe.sellersToContractETHBalance(seller.address);
+			const sellerETHBalanceInContractAfter = await trustMe.tradeIdToETHFromSeller(0);
 			expect(sellerETHBalanceInContractBefore.sub(sellerETHBalanceInContractAfter)).to.eq(parseEther('200'));
 		});
 
