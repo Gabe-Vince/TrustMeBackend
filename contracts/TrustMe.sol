@@ -138,7 +138,7 @@ contract TrustMe is ERC721Holder {
 			revert InvalidAmount();
 		if (_amountOfTokenToBuy == 0 && _amountOfETHToBuy == 0 && _addressNFTToBuy == address(0))
 			revert InvalidAmount();
-		if (IERC20(_tokenToSell).balanceOf(msg.sender) < _amountOfTokenToSell) revert InsufficientBalance();
+		if (IERC20(_tokenToSell).balanceOf(msg.sender) < _amountOfTokenToSell) revert InsufficientBalance(); // a similar condition has deliberately been omitted for ETH. See comment below in confirm trade.
 		if (_addressNFTToSell != address(0) && IERC721(_addressNFTToSell).ownerOf(_tokenIdNFTToSell) != msg.sender)
 			revert InsufficientBalance();
 		if (_amountOfETHToSell > 0 && _amountOfETHToBuy > 0) revert CannotTradeSameToken();
@@ -208,9 +208,13 @@ contract TrustMe is ERC721Holder {
 		if (trade.buyer != msg.sender) revert OnlyBuyer();
 		if (trade.deadline < block.timestamp) revert TradeIsExpired();
 
-		// Do we need the check the condition immediately below? Is it enough to rely on ERC20 contract checking this? What if it is a custom token without this check? This check used to be in the validateCloseTrade modifier. Why did you remove it? I assume that a reason might be that the balance is taken after the transfer, which would effectively mean that the buyer needs to have twice the number of tokens it agreed to transfer.
+		// The condition immediately below was removed? Just keen to understand why? It was included before, but removed in a later version. We continue check this condition on the seller side in the validateTrade modifier. Unless there is a good reason not to, I suggest we keep it in. All tests pass with it included.
 
 		if (IERC20(trade.tokenToBuy).balanceOf(msg.sender) < trade.amountOfTokenToBuy) revert InsufficientBalance();
+
+		// the similar condition below for native currency (as opposed to tokens) causes the tests to fail if the amount to transfer is more than half the initial balance. The reason is that msg.sender.balance is the balance upon the transaction being succesful. The ETH to transferred has then already been deducted from the initial amount. The condition below is captured by requiring the msg.value == amount to transfer.
+
+		// [ if (msg.sender.balance < trade.amountOfETHToBuy) revert InsufficientBalance() this condition is only for illustration, it should not be included];
 
 		if (IERC20(trade.tokenToBuy).allowance(msg.sender, address(this)) < trade.amountOfTokenToBuy)
 			revert InsufficientAllowance();
@@ -274,6 +278,14 @@ contract TrustMe is ERC721Holder {
 			tradeIdToETHFromSeller[_tradeID] < trade.amountOfETHToSell
 		) revert InsufficientBalance();
 
+		if (IERC20(trade.tokenToSell).balanceOf(address(this)) < trade.amountOfTokenToSell)
+			revert InsufficientBalance();
+
+		if (
+			trade.addressNFTToSell != address(0) &&
+			IERC721(trade.addressNFTToSell).ownerOf(trade.tokenIdNFTToSell) != address(this)
+		) revert InsufficientBalance();
+
 		if (trade.deadline < block.timestamp) revert TradeIsExpired(); // NT: should a user be able to cancel a trade even if it is expired, even if only for peace of mind? I think it would be better from a UX perspective to allow users to cancel expired trades that they disagree with and want to make extra sure are done away with.
 
 		if (trade.amountOfTokenToSell > 0)
@@ -319,6 +331,14 @@ contract TrustMe is ERC721Holder {
 		if (
 			address(this).balance < trade.amountOfETHToSell ||
 			tradeIdToETHFromSeller[_tradeID] < trade.amountOfETHToSell
+		) revert InsufficientBalance();
+
+		if (IERC20(trade.tokenToSell).balanceOf(address(this)) < trade.amountOfTokenToSell)
+			revert InsufficientBalance();
+
+		if (
+			trade.addressNFTToSell != address(0) &&
+			IERC721(trade.addressNFTToSell).ownerOf(trade.tokenIdNFTToSell) != address(this)
 		) revert InsufficientBalance();
 
 		if (trade.amountOfTokenToSell > 0)
