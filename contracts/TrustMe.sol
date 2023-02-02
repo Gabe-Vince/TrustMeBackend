@@ -71,15 +71,15 @@ contract TrustMe {
 	event TradeWithdrawn(uint256 indexed tradeID, address indexed seller, address indexed buyer);
 
 	/***************
-	 * MODIFIERS *
+	 * SECURITY FUNCTIONS*
 	 ***************/
-	modifier validateAddTrade(
+	function validateAddTrade(
 		address _buyer,
 		address _tokenToSell,
 		address _tokenToBuy,
 		uint256 _amountOfTokenToSell,
 		uint256 _amountOfTokenToBuy
-	) {
+	) internal {
 		if (msg.sender == address(0)) revert InvalidAddress();
 		if (_buyer == address(0)) revert InvalidAddress();
 		if (_tokenToSell == address(0)) revert InvalidAddress();
@@ -88,9 +88,25 @@ contract TrustMe {
 		if (msg.sender == _buyer) revert CannotTradeWithSelf();
 		if (_amountOfTokenToSell == 0) revert InvalidAmount();
 		if (_amountOfTokenToBuy == 0) revert InvalidAmount();
-		if (IERC20(_tokenToSell).balanceOf(msg.sender) < _amountOfTokenToSell) revert InsufficientBalance();
-		_;
 	}
+
+	// function tradeErc20only() external {}
+
+	// function tradeEthAndEcr20() external {}
+
+	// function tradeErc721AndErc20() external {}
+
+	// function tradeErc721Only() external {}
+
+	/**
+	 * @dev function to add a trade between a buyer and a seller
+	 * @param _buyer address of the buyer
+	 * @param _tokenToSell address of the token being sold
+	 * @param _tokenToBuy address of the token being bought
+	 * @param _amountOfTokenToSell amount of token being sold
+	 * @param _amountOfTokenToBuy amount of token being bought
+	 * @param _tradePeriod duration of the trade
+	 */
 
 	function addTrade(
 		address _buyer,
@@ -99,7 +115,8 @@ contract TrustMe {
 		uint256 _amountOfTokenToSell,
 		uint256 _amountOfTokenToBuy,
 		uint256 _tradePeriod
-	) external validateAddTrade(_buyer, _tokenToSell, _tokenToBuy, _amountOfTokenToSell, _amountOfTokenToBuy) {
+	) external {
+		validateAddTrade(_buyer, _tokenToSell, _tokenToBuy, _amountOfTokenToSell, _amountOfTokenToBuy);
 		uint deadline = block.timestamp + _tradePeriod;
 		IERC20 token = IERC20(_tokenToSell);
 		token.safeTransferFrom(msg.sender, address(this), _amountOfTokenToSell);
@@ -125,13 +142,15 @@ contract TrustMe {
 		_tradeId.increment();
 	}
 
+	/**
+	 * @dev Function to confirm a trade on the contract
+	 * @param _tradeID The ID of the trade to be confirmed
+	 */
 	function confirmTrade(uint256 _tradeID) external {
 		Trade memory trade = tradeIDToTrade[_tradeID];
 		if (trade.status != TradeStatus.Pending) revert TradeIsNotPending();
 		if (trade.buyer != msg.sender) revert OnlyBuyer();
 		if (trade.deadline < block.timestamp) revert TradeIsExpired();
-		if (IERC20(trade.tokenToBuy).allowance(msg.sender, address(this)) < trade.amountOfTokenToBuy)
-			revert InsufficientAllowance();
 		IERC20(trade.tokenToBuy).safeTransferFrom(msg.sender, trade.seller, trade.amountOfTokenToBuy);
 		IERC20(trade.tokenToSell).safeTransfer(trade.buyer, trade.amountOfTokenToSell);
 		trade.status = TradeStatus.Confirmed;
