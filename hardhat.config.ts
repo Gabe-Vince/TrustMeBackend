@@ -1,6 +1,6 @@
 require('dotenv').config();
 
-import {HardhatUserConfig} from 'hardhat/config';
+import { HardhatUserConfig } from 'hardhat/config';
 import '@nomicfoundation/hardhat-toolbox';
 import 'hardhat-contract-sizer';
 import 'hardhat-deploy';
@@ -16,7 +16,16 @@ const ALCHEMY_GOERLI = process.env.ALCHEMY_API_KEY_GOERLI || '';
 const ALCHEMY_MAINNET = process.env.ALCHEMY_API_KEY_MAINET || '';
 
 const config: HardhatUserConfig = {
-	solidity: '0.8.17',
+	solidity: {
+		version: '0.8.17',
+		settings: {
+			viaIR: true,
+			optimizer: {
+				enabled: true,
+				runs: 200
+			}
+		}
+	},
 	defaultNetwork: 'hardhat',
 	networks: {
 		hardhat: {
@@ -25,16 +34,16 @@ const config: HardhatUserConfig = {
 		localhost: {
 			chainId: chainIds.hardhat,
 		},
-		mainnet: {
-			url: ALCHEMY_MAINNET,
-			accounts: [process.env.PRIVATE_KEY || ''],
-			chainId: chainIds.mainnet,
-		},
-		goerli: {
-			url: ALCHEMY_GOERLI,
-			accounts: [process.env.PRIVATE_KEY || ''],
-			chainId: chainIds.goerli,
-		},
+		// mainnet: {
+		// 	url: ALCHEMY_MAINNET,
+		// 	accounts: [process.env.PRIVATE_KEY || ''],
+		// 	chainId: chainIds.mainnet,
+		// },
+		// goerli: {
+		// 	url: ALCHEMY_GOERLI,
+		// 	accounts: [process.env.PRIVATE_KEY || ''],
+		// 	chainId: chainIds.goerli,
+		// },
 	},
 	typechain: {
 		outDir: 'typechain',
