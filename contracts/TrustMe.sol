@@ -23,8 +23,6 @@ error InsufficientAllowance();
 error UpkeepNotNeeded();
 error CannotWithdrawTimeNotPassed();
 error TradeIsNotExpired();
-
-// NT error added for ETH implementation
 error IncorrectAmoutOfETHTransferred();
 
 contract TrustMe is ERC721Holder {
@@ -62,6 +60,7 @@ contract TrustMe is ERC721Holder {
 
 	// NT: added TransactionInput struct to avoid stack do deep error
 	// which occurs due to added function arguments in addTrade
+
 	struct TransactionInput {
 		address buyer;
 		address tokenToSell;
@@ -70,9 +69,9 @@ contract TrustMe is ERC721Holder {
 		address tokenToBuy;
 		address addressNFTToBuy;
 		uint256 tokenIdNFTToBuy;
-		uint256 amountOfETHToSell; //added for ETH
+		uint256 amountOfETHToSell;
 		uint256 amountOfTokenToSell;
-		uint256 amountOfETHToBuy; //added for ETH
+		uint256 amountOfETHToBuy;
 		uint256 amountOfTokenToBuy;
 		uint256 tradePeriod;
 	}
@@ -106,14 +105,6 @@ contract TrustMe is ERC721Holder {
 	 * MODIFIERS *
 	 ***************/
 
-	//  NT: do we need to require that either tokens or ETH
-	// are are traded but not both at the same time on one side?
-	// I have not done so here.
-	// In the current UI it is either one or the other,
-	// but future versions should facilitate
-	// batching multiple assets on either side of the trade
-	// (including both ETH and tokens on one side of the trade).
-
 	modifier validateAddTrade(
 		address _buyer,
 		address _tokenToSell,
@@ -123,19 +114,26 @@ contract TrustMe is ERC721Holder {
 		address _addressNFTToBuy,
 		uint256 _tokenIdNFTToBuy,
 		uint256 _amountOfTokenToSell,
-		uint256 _amountOfETHToSell, // added for ETH
+		uint256 _amountOfETHToSell,
 		uint256 _amountOfTokenToBuy,
-		uint256 _amountOfETHToBuy // added for ETH
+		uint256 _amountOfETHToBuy
 	) {
 		if (msg.sender == address(0)) revert InvalidAddress();
 		if (_buyer == address(0)) revert InvalidAddress();
+		if (msg.sender == _buyer) revert CannotTradeWithSelf();
 		if (_amountOfTokenToSell > 0 && _tokenToSell == address(0)) revert InvalidAddress();
 		if (_amountOfTokenToBuy > 0 && _tokenToBuy == address(0)) revert InvalidAddress();
 		if (_tokenToSell == _tokenToBuy) revert CannotTradeSameToken();
-		if (_tokenToSell == _addressNFTToBuy) revert CannotTradeSameToken();
+		if (
+			_addressNFTToSell != address(0) &&
+			_addressNFTToBuy != address(0) &&
+			_addressNFTToSell == _addressNFTToBuy &&
+			_tokenIdNFTToBuy == _tokenIdNFTToSell
+		) revert CannotTradeSameToken();
+		if (_tokenToSell == _addressNFTToBuy) revert TokenAndNFTAddressCannotBeEqual();
 		if (_tokenToSell == _addressNFTToSell) revert TokenAndNFTAddressCannotBeEqual();
 		if (_tokenToBuy == _addressNFTToBuy) revert TokenAndNFTAddressCannotBeEqual();
-		if (msg.sender == _buyer) revert CannotTradeWithSelf();
+		if (_tokenToBuy == _addressNFTToSell) revert TokenAndNFTAddressCannotBeEqual();
 		if (_amountOfTokenToSell == 0 && _amountOfETHToSell == 0 && _addressNFTToSell == address(0))
 			revert InvalidAmount();
 		if (_amountOfTokenToBuy == 0 && _amountOfETHToBuy == 0 && _addressNFTToBuy == address(0))
@@ -143,8 +141,6 @@ contract TrustMe is ERC721Holder {
 		if (IERC20(_tokenToSell).balanceOf(msg.sender) < _amountOfTokenToSell) revert InsufficientBalance();
 		if (_addressNFTToSell != address(0) && IERC721(_addressNFTToSell).ownerOf(_tokenIdNFTToSell) != msg.sender)
 			revert InsufficientBalance();
-
-		// added for ETH
 		if (_amountOfETHToSell > 0 && _amountOfETHToBuy > 0) revert CannotTradeSameToken();
 		if (msg.value != _amountOfETHToSell) revert IncorrectAmoutOfETHTransferred();
 		_;
@@ -177,7 +173,6 @@ contract TrustMe is ERC721Holder {
 		if (transactionInput.addressNFTToSell != address(0))
 			NFTToSell.safeTransferFrom(msg.sender, address(this), transactionInput.tokenIdNFTToSell);
 
-		// added for ETH
 		tradeIdToETHFromSeller[_tradeId.current()] += msg.value;
 
 		Trade memory trade = Trade(
@@ -213,27 +208,32 @@ contract TrustMe is ERC721Holder {
 		if (trade.buyer != msg.sender) revert OnlyBuyer();
 		if (trade.deadline < block.timestamp) revert TradeIsExpired();
 
-		// Do we need the check inserted and commented out below? Is it enough to rely on ERC20 contract checking this? What if it is a custom token without this check? This check used to be in the validateCloseTrade modifier. Why did you remove it? I assume that a reason might be that the balance is taken after the transfer, which would effectively mean that the buyer needs to have twice the number of tokens it agreed to transfer.
+		// Do we need the check the condition immediately below? Is it enough to rely on ERC20 contract checking this? What if it is a custom token without this check? This check used to be in the validateCloseTrade modifier. Why did you remove it? I assume that a reason might be that the balance is taken after the transfer, which would effectively mean that the buyer needs to have twice the number of tokens it agreed to transfer.
 
-		// if (IERC20(trade.tokenToBuy).balanceOf(msg.sender) < trade.amountOfTokenToBuy) revert InsufficientBalance();
+		if (IERC20(trade.tokenToBuy).balanceOf(msg.sender) < trade.amountOfTokenToBuy) revert InsufficientBalance();
 
 		if (IERC20(trade.tokenToBuy).allowance(msg.sender, address(this)) < trade.amountOfTokenToBuy)
 			revert InsufficientAllowance();
 
 		if (
 			trade.addressNFTToBuy != address(0) &&
+			IERC721(trade.addressNFTToBuy).ownerOf(trade.tokenIdNFTToBuy) != trade.buyer
+		) revert InsufficientBalance();
+
+		if (
+			trade.addressNFTToBuy != address(0) &&
 			IERC721(trade.addressNFTToBuy).getApproved(trade.tokenIdNFTToBuy) != address(this)
 		) revert InsufficientAllowance();
 
+		// NT added extra condition below - what if our contract were to be drained? Perhaps unnecessary but feels safer.
+
 		if (IERC20(trade.tokenToSell).balanceOf(address(this)) < trade.amountOfTokenToSell)
-			revert InsufficientBalance(); // NT added extra condition - what if our contract is drained? We don't want the contagion to spread.
+			revert InsufficientBalance();
 
 		if (
 			trade.addressNFTToSell != address(0) &&
 			IERC721(trade.addressNFTToSell).ownerOf(trade.tokenIdNFTToSell) != address(this)
 		) revert InsufficientBalance();
-
-		// made additions and changes in connection with ETH implementation
 
 		if (msg.value != trade.amountOfETHToBuy) revert IncorrectAmoutOfETHTransferred();
 		if (
@@ -272,11 +272,10 @@ contract TrustMe is ERC721Holder {
 		if (
 			address(this).balance < trade.amountOfETHToSell ||
 			tradeIdToETHFromSeller[_tradeID] < trade.amountOfETHToSell
-		) revert InsufficientBalance(); //added for ETH
+		) revert InsufficientBalance();
 
-		if (trade.deadline < block.timestamp) revert TradeIsExpired(); // NT: should a user be able to cancel a trade even if it is expired, even if only for peace of mind?
+		if (trade.deadline < block.timestamp) revert TradeIsExpired(); // NT: should a user be able to cancel a trade even if it is expired, even if only for peace of mind? I think it would be better from a UX perspective to allow users to cancel expired trades that they disagree with and want to make extra sure are done away with.
 
-		// added for ETH
 		if (trade.amountOfTokenToSell > 0)
 			IERC20(trade.tokenToSell).safeTransfer(trade.seller, trade.amountOfTokenToSell);
 
@@ -288,7 +287,6 @@ contract TrustMe is ERC721Holder {
 
 		trade.status = TradeStatus.Canceled;
 		removePendingTrade(getPendingTradeIndex(trade.id));
-		// tradeIDToTrade[_tradeID] = trade; NT: this is not needed if you change trade variable in this function from memory to storage - saves a tiny bit of code.
 
 		emit TradeCanceled(trade.id, trade.seller, trade.buyer);
 	}
@@ -298,7 +296,6 @@ contract TrustMe is ERC721Holder {
 			Trade storage trade = tradeIDToTrade[pendingTradesIDs[uint(i)]];
 			if (trade.deadline <= block.timestamp) {
 				trade.status = TradeStatus.Expired;
-				// removePendingTrade(getPendingTradeIndex(trade.id)); //NT: is this necessary? Is getPendingTradeIndex(trade.id) not just equal to i? The line below should work as well shouldnt it? Tests pass.
 				removePendingTrade(i);
 				emit TradeExpired(trade.id, trade.seller, trade.buyer);
 				if (i == 0) break;
@@ -319,8 +316,6 @@ contract TrustMe is ERC721Holder {
 		Trade storage trade = tradeIDToTrade[_tradeID];
 		if (trade.status != TradeStatus.Expired) revert TradeIsNotExpired();
 		if (trade.seller != msg.sender) revert OnlySeller();
-
-		// added for ETH
 		if (
 			address(this).balance < trade.amountOfETHToSell ||
 			tradeIdToETHFromSeller[_tradeID] < trade.amountOfETHToSell
@@ -334,9 +329,7 @@ contract TrustMe is ERC721Holder {
 
 		if (trade.amountOfETHToSell > 0) payable(trade.seller).transfer(trade.amountOfETHToSell);
 		tradeIdToETHFromSeller[_tradeID] -= trade.amountOfETHToSell;
-
 		trade.status = TradeStatus.Withdrawn;
-		// tradeIDToTrade[_tradeID] = trade; // NT not nessary if you change trade memory to storage
 		emit TradeWithdrawn(trade.id, trade.seller, trade.buyer);
 	}
 
