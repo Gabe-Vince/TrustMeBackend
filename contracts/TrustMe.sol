@@ -25,6 +25,14 @@ error CannotWithdrawTimeNotPassed();
 error TradeIsNotExpired();
 error IncorrectAmoutOfETHTransferred();
 
+library TradeLib {
+	struct NFT {
+		address senderAddressNFT;
+		uint256 senderTokenIdNFT;
+		address receiverAddressNFT;
+	}
+}
+
 contract TrustMe is ERC721Holder {
 	using SafeERC20 for IERC20;
 	using Counters for Counters.Counter;
