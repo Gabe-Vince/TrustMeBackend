@@ -58,9 +58,6 @@ contract TrustMe is ERC721Holder {
 		TradeStatus status;
 	}
 
-	// NT: added TransactionInput struct to avoid stack do deep error
-	// which occurs due to added function arguments in addTrade
-
 	struct TransactionInput {
 		address buyer;
 		address tokenToSell;
@@ -88,7 +85,6 @@ contract TrustMe is ERC721Holder {
 
 	uint256[] public pendingTradesIDs;
 
-	// NT - is it necessary to keep track of seller token and ETH balances in contract? I have done so now for ETH;
 	mapping(uint => uint) public tradeIdToETHFromSeller;
 
 	/**********
@@ -138,7 +134,7 @@ contract TrustMe is ERC721Holder {
 			revert InvalidAmount();
 		if (_amountOfTokenToBuy == 0 && _amountOfETHToBuy == 0 && _addressNFTToBuy == address(0))
 			revert InvalidAmount();
-		if (IERC20(_tokenToSell).balanceOf(msg.sender) < _amountOfTokenToSell) revert InsufficientBalance(); // a similar condition has deliberately been omitted for ETH. See comment below in confirm trade.
+		if (IERC20(_tokenToSell).balanceOf(msg.sender) < _amountOfTokenToSell) revert InsufficientBalance();
 		if (_addressNFTToSell != address(0) && IERC721(_addressNFTToSell).ownerOf(_tokenIdNFTToSell) != msg.sender)
 			revert InsufficientBalance();
 		if (_amountOfETHToSell > 0 && _amountOfETHToBuy > 0) revert CannotTradeSameToken();
@@ -208,13 +204,7 @@ contract TrustMe is ERC721Holder {
 		if (trade.buyer != msg.sender) revert OnlyBuyer();
 		if (trade.deadline < block.timestamp) revert TradeIsExpired();
 
-		// The condition immediately below was removed? Just keen to understand why? It was included before, but removed in a later version. We continue check this condition on the seller side in the validateTrade modifier. Unless there is a good reason not to, I suggest we keep it in. All tests pass with it included.
-
 		if (IERC20(trade.tokenToBuy).balanceOf(msg.sender) < trade.amountOfTokenToBuy) revert InsufficientBalance();
-
-		// the similar condition below for native currency (as opposed to tokens) causes the tests to fail if the amount to transfer is more than half the initial balance. The reason is that msg.sender.balance is the balance upon the transaction being succesful. The ETH to transferred has then already been deducted from the initial amount. The condition below is captured by requiring the msg.value == amount to transfer.
-
-		// [ if (msg.sender.balance < trade.amountOfETHToBuy) revert InsufficientBalance() this condition is only for illustration, it should not be included];
 
 		if (IERC20(trade.tokenToBuy).allowance(msg.sender, address(this)) < trade.amountOfTokenToBuy)
 			revert InsufficientAllowance();
@@ -228,8 +218,6 @@ contract TrustMe is ERC721Holder {
 			trade.addressNFTToBuy != address(0) &&
 			IERC721(trade.addressNFTToBuy).getApproved(trade.tokenIdNFTToBuy) != address(this)
 		) revert InsufficientAllowance();
-
-		// NT added extra condition below - what if our contract were to be drained? Perhaps unnecessary but feels safer.
 
 		if (IERC20(trade.tokenToSell).balanceOf(address(this)) < trade.amountOfTokenToSell)
 			revert InsufficientBalance();
@@ -271,7 +259,7 @@ contract TrustMe is ERC721Holder {
 	function cancelTrade(uint256 _tradeID) external {
 		Trade storage trade = tradeIDToTrade[_tradeID];
 		if (trade.status != TradeStatus.Pending) revert TradeIsNotPending();
-		if (msg.sender != trade.seller && msg.sender != trade.buyer) revert OnlySellerOrBuyer(); // NT: enabled the buyer to cancel too (I think this is important, see my comment in discord, but let me know if you disagreee)
+		if (msg.sender != trade.seller && msg.sender != trade.buyer) revert OnlySellerOrBuyer();
 
 		if (
 			address(this).balance < trade.amountOfETHToSell ||
@@ -286,7 +274,7 @@ contract TrustMe is ERC721Holder {
 			IERC721(trade.addressNFTToSell).ownerOf(trade.tokenIdNFTToSell) != address(this)
 		) revert InsufficientBalance();
 
-		if (trade.deadline < block.timestamp) revert TradeIsExpired(); // NT: should a user be able to cancel a trade even if it is expired, even if only for peace of mind? I think it would be better from a UX perspective to allow users to cancel expired trades that they disagree with and want to make extra sure are done away with.
+		if (trade.deadline < block.timestamp) revert TradeIsExpired();
 
 		if (trade.amountOfTokenToSell > 0)
 			IERC20(trade.tokenToSell).safeTransfer(trade.seller, trade.amountOfTokenToSell);
@@ -319,7 +307,7 @@ contract TrustMe is ERC721Holder {
 		if (index >= pendingTradesIDs.length) return;
 
 		for (uint i = index; i < pendingTradesIDs.length - 1; i++) {
-			pendingTradesIDs[i] = pendingTradesIDs[i + 1]; // isnt this a very expensive method of removing an element? There is no need to maintain the same order and move all elements back one space is there?
+			pendingTradesIDs[i] = pendingTradesIDs[i + 1];
 		}
 		pendingTradesIDs.pop();
 	}
