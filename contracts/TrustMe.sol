@@ -191,23 +191,8 @@ contract TrustMe is ERC721Holder {
 
 	function cancelTrade(uint256 _tradeID) external {
 		Trade storage trade = tradeIDToTrade[_tradeID];
-		if (trade.status != TradeStatus.Pending) revert TradeIsNotPending();
-		if (msg.sender != trade.seller && msg.sender != trade.buyer) revert OnlySellerOrBuyer(); // NT: enabled the buyer to cancel too (I think this is important, see my comment in discord, but let me know if you disagreee)
-
-		if (
-			address(this).balance < trade.amountOfETHToSell ||
-			tradeIdToETHFromSeller[_tradeID] < trade.amountOfETHToSell
-		) revert InsufficientBalance();
-
-		if (IERC20(trade.tokenToSell).balanceOf(address(this)) < trade.amountOfTokenToSell)
-			revert InsufficientBalance();
-
-		if (
-			trade.addressNFTToSell != address(0) &&
-			IERC721(trade.addressNFTToSell).ownerOf(trade.tokenIdNFTToSell) != address(this)
-		) revert InsufficientBalance();
-
-		if (trade.deadline < block.timestamp) revert TradeIsExpired(); // NT: should a user be able to cancel a trade even if it is expired, even if only for peace of mind? I think it would be better from a UX perspective to allow users to cancel expired trades that they disagree with and want to make extra sure are done away with.
+		address sender = msg.sender;
+		SecurityFunctions.validateCancelTrade(trade, sender);
 
 		if (trade.amountOfTokenToSell > 0)
 			IERC20(trade.tokenToSell).safeTransfer(trade.seller, trade.amountOfTokenToSell);
@@ -247,20 +232,14 @@ contract TrustMe is ERC721Holder {
 
 	function withdraw(uint256 _tradeID) external {
 		Trade storage trade = tradeIDToTrade[_tradeID];
-		if (trade.status != TradeStatus.Expired) revert TradeIsNotExpired();
-		if (trade.seller != msg.sender) revert OnlySeller();
+		SecurityFunctions.validateWithdraw(trade, msg.sender);
 		if (
 			address(this).balance < trade.amountOfETHToSell ||
 			tradeIdToETHFromSeller[_tradeID] < trade.amountOfETHToSell
 		) revert InsufficientBalance();
 
-		if (IERC20(trade.tokenToSell).balanceOf(address(this)) < trade.amountOfTokenToSell)
-			revert InsufficientBalance();
-
-		if (
-			trade.addressNFTToSell != address(0) &&
-			IERC721(trade.addressNFTToSell).ownerOf(trade.tokenIdNFTToSell) != address(this)
-		) revert InsufficientBalance();
+		// if (IERC20(trade.tokenToSell).balanceOf(address(this)) < trade.amountOfTokenToSell)
+		// 	revert InsufficientBalance();
 
 		if (trade.amountOfTokenToSell > 0)
 			IERC20(trade.tokenToSell).safeTransfer(trade.seller, trade.amountOfTokenToSell);

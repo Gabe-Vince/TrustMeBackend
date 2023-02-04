@@ -107,8 +107,27 @@ library Validation {
 		return true;
 	}
 
+	function checkSeller(address addr1, address addr2) internal pure returns (bool) {
+		if (addr1 != addr2) revert OnlySeller();
+		return true;
+	}
+
 	function checkDeadline(uint _deadline) internal view returns (bool) {
 		if (_deadline < block.timestamp) revert TradeIsExpired();
+		return true;
+	}
+
+	function checkBuyerOrSeller(
+		address seller,
+		address buyer,
+		address sender
+	) internal pure returns (bool) {
+		if (seller != sender || buyer != sender) revert OnlySellerOrBuyer();
+		return true;
+	}
+
+	function checkTradeNotExpired(uint _deadline) internal returns (bool) {
+		if (_deadline > block.timestamp) revert TradeIsNotExpired();
 		return true;
 	}
 }

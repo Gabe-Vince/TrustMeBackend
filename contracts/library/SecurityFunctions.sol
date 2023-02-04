@@ -3,6 +3,8 @@ pragma solidity ^0.8.17;
 import "../library/Validation.sol";
 import "../TrustMe.sol";
 
+import "hardhat/console.sol";
+
 library SecurityFunctions {
 	// check if the trade is valid
 
@@ -50,5 +52,19 @@ library SecurityFunctions {
 		Validation.checkNftApproval(trade.addressNFTToBuy, address(this), trade.tokenIdNFTToBuy);
 		Validation.checkNftOwner(trade.addressNFTToSell, address(this), trade.tokenIdNFTToSell);
 		Validation.checkEthAmount(value, trade.amountOfETHToBuy);
+	}
+
+	function validateCancelTrade(TrustMe.Trade memory trade, address sender) internal {
+		if (trade.status != TrustMe.TradeStatus.Pending) revert TradeIsNotPending();
+		Validation.checkBuyerOrSeller(trade.seller, trade.buyer, sender);
+		Validation.checkNftOwner(trade.addressNFTToSell, sender, trade.tokenIdNFTToSell);
+		Validation.checkDeadline(trade.deadline);
+	}
+
+	function validateWithdraw(TrustMe.Trade memory trade, address sender) internal {
+		if (trade.status != TrustMe.TradeStatus.Expired) revert TradeIsNotExpired();
+		Validation.checkTradeNotExpired(trade.deadline);
+		Validation.checkSeller(trade.seller, sender);
+		Validation.checkNftOwner(trade.addressNFTToSell, sender, trade.tokenIdNFTToSell);
 	}
 }
