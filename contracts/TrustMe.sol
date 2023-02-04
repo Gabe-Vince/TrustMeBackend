@@ -6,24 +6,8 @@ import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import "@openzeppelin/contracts/token/ERC721/IERC721.sol";
 import "@openzeppelin/contracts/token/ERC721/utils/ERC721Holder.sol";
 import "@openzeppelin/contracts/utils/Counters.sol";
-
-error InvalidAddress();
-error CannotTradeSameToken();
-error TokenAndNFTAddressCannotBeEqual();
-error CannotTradeWithSelf();
-error DeadlineShouldBeAtLeast5Minutes();
-error InvalidAmount();
-error InsufficientBalance();
-error OnlyBuyer();
-error OnlySeller();
-error OnlySellerOrBuyer();
-error TradeIsNotPending();
-error TradeIsExpired();
-error InsufficientAllowance();
-error UpkeepNotNeeded();
-error CannotWithdrawTimeNotPassed();
-error TradeIsNotExpired();
-error IncorrectAmoutOfETHTransferred();
+import "./library/Validation.sol";
+import "./library/SecurityFunctions.sol";
 
 library TradeLib {
 	struct NFT {
@@ -113,53 +97,8 @@ contract TrustMe is ERC721Holder {
 	 * MODIFIERS *
 	 ***************/
 
-	modifier validateAddTrade(
-		address _buyer,
-		address _tokenToSell,
-		address _addressNFTToSell,
-		uint256 _tokenIdNFTToSell,
-		address _tokenToBuy,
-		address _addressNFTToBuy,
-		uint256 _tokenIdNFTToBuy,
-		uint256 _amountOfTokenToSell,
-		uint256 _amountOfETHToSell,
-		uint256 _amountOfTokenToBuy,
-		uint256 _amountOfETHToBuy
-	) {
-		if (msg.sender == address(0)) revert InvalidAddress();
-		if (_buyer == address(0)) revert InvalidAddress();
-		if (msg.sender == _buyer) revert CannotTradeWithSelf();
-		if (_amountOfTokenToSell > 0 && _tokenToSell == address(0)) revert InvalidAddress();
-		if (_amountOfTokenToBuy > 0 && _tokenToBuy == address(0)) revert InvalidAddress();
-		if (_tokenToSell == _tokenToBuy) revert CannotTradeSameToken();
-		if (
-			_addressNFTToSell != address(0) &&
-			_addressNFTToBuy != address(0) &&
-			_addressNFTToSell == _addressNFTToBuy &&
-			_tokenIdNFTToBuy == _tokenIdNFTToSell
-		) revert CannotTradeSameToken();
-		if (_tokenToSell == _addressNFTToBuy) revert TokenAndNFTAddressCannotBeEqual();
-		if (_tokenToSell == _addressNFTToSell) revert TokenAndNFTAddressCannotBeEqual();
-		if (_tokenToBuy == _addressNFTToBuy) revert TokenAndNFTAddressCannotBeEqual();
-		if (_tokenToBuy == _addressNFTToSell) revert TokenAndNFTAddressCannotBeEqual();
-		if (_amountOfTokenToSell == 0 && _amountOfETHToSell == 0 && _addressNFTToSell == address(0))
-			revert InvalidAmount();
-		if (_amountOfTokenToBuy == 0 && _amountOfETHToBuy == 0 && _addressNFTToBuy == address(0))
-			revert InvalidAmount();
-		if (IERC20(_tokenToSell).balanceOf(msg.sender) < _amountOfTokenToSell) revert InsufficientBalance(); // a similar condition has deliberately been omitted for ETH. See comment below in confirm trade.
-		if (_addressNFTToSell != address(0) && IERC721(_addressNFTToSell).ownerOf(_tokenIdNFTToSell) != msg.sender)
-			revert InsufficientBalance();
-		if (_amountOfETHToSell > 0 && _amountOfETHToBuy > 0) revert CannotTradeSameToken();
-		if (msg.value != _amountOfETHToSell) revert IncorrectAmoutOfETHTransferred();
-		_;
-	}
-
-	function addTrade(
-		TransactionInput calldata transactionInput
-	)
-		external
-		payable
-		validateAddTrade(
+	function addTrade(TransactionInput calldata transactionInput) external payable {
+		SecurityFunctions.validateAddTrade(
 			transactionInput.buyer,
 			transactionInput.tokenToSell,
 			transactionInput.addressNFTToSell,
@@ -170,9 +109,10 @@ contract TrustMe is ERC721Holder {
 			transactionInput.amountOfTokenToSell,
 			transactionInput.amountOfETHToSell,
 			transactionInput.amountOfTokenToBuy,
-			transactionInput.amountOfETHToBuy
-		)
-	{
+			transactionInput.amountOfETHToBuy,
+			msg.value
+		);
+
 		uint deadline = block.timestamp + transactionInput.tradePeriod;
 		IERC20 token = IERC20(transactionInput.tokenToSell);
 		IERC721 NFTToSell = IERC721(transactionInput.addressNFTToSell);
@@ -213,45 +153,18 @@ contract TrustMe is ERC721Holder {
 	function confirmTrade(uint256 _tradeID) external payable {
 		Trade memory trade = tradeIDToTrade[_tradeID];
 		if (trade.status != TradeStatus.Pending) revert TradeIsNotPending();
-		if (trade.buyer != msg.sender) revert OnlyBuyer();
-		if (trade.deadline < block.timestamp) revert TradeIsExpired();
+		address sender = msg.sender;
+		uint value = msg.value;
+		SecurityFunctions.validateConfirmTrade(trade, sender, value);
 
-		// The condition immediately below was removed? Just keen to understand why? It was included before, but removed in a later version. We continue check this condition on the seller side in the validateTrade modifier. Unless there is a good reason not to, I suggest we keep it in. All tests pass with it included.
+		// if (IERC20(trade.tokenToBuy).balanceOf(msg.sender) < trade.amountOfTokenToBuy) revert InsufficientBalance();
+		// if (IERC20(trade.tokenToBuy).allowance(msg.sender, address(this)) < trade.amountOfTokenToBuy)
+		// 	revert InsufficientAllowance();
 
-		if (IERC20(trade.tokenToBuy).balanceOf(msg.sender) < trade.amountOfTokenToBuy) revert InsufficientBalance();
-
-		// the similar condition below for native currency (as opposed to tokens) causes the tests to fail if the amount to transfer is more than half the initial balance. The reason is that msg.sender.balance is the balance upon the transaction being succesful. The ETH to transferred has then already been deducted from the initial amount. The condition below is captured by requiring the msg.value == amount to transfer.
-
-		// [ if (msg.sender.balance < trade.amountOfETHToBuy) revert InsufficientBalance() this condition is only for illustration, it should not be included];
-
-		if (IERC20(trade.tokenToBuy).allowance(msg.sender, address(this)) < trade.amountOfTokenToBuy)
-			revert InsufficientAllowance();
-
-		if (
-			trade.addressNFTToBuy != address(0) &&
-			IERC721(trade.addressNFTToBuy).ownerOf(trade.tokenIdNFTToBuy) != trade.buyer
-		) revert InsufficientBalance();
-
-		if (
-			trade.addressNFTToBuy != address(0) &&
-			IERC721(trade.addressNFTToBuy).getApproved(trade.tokenIdNFTToBuy) != address(this)
-		) revert InsufficientAllowance();
-
-		// NT added extra condition below - what if our contract were to be drained? Perhaps unnecessary but feels safer.
-
-		if (IERC20(trade.tokenToSell).balanceOf(address(this)) < trade.amountOfTokenToSell)
-			revert InsufficientBalance();
-
-		if (
-			trade.addressNFTToSell != address(0) &&
-			IERC721(trade.addressNFTToSell).ownerOf(trade.tokenIdNFTToSell) != address(this)
-		) revert InsufficientBalance();
-
-		if (msg.value != trade.amountOfETHToBuy) revert IncorrectAmoutOfETHTransferred();
-		if (
-			address(this).balance < trade.amountOfETHToSell ||
-			tradeIdToETHFromSeller[_tradeID] < trade.amountOfETHToSell
-		) revert InsufficientBalance();
+		// if (
+		// 	address(this).balance < trade.amountOfETHToSell ||
+		// 	tradeIdToETHFromSeller[_tradeID] < trade.amountOfETHToSell
+		// ) revert InsufficientBalance();
 
 		if (trade.amountOfTokenToBuy > 0)
 			IERC20(trade.tokenToBuy).safeTransferFrom(msg.sender, trade.seller, trade.amountOfTokenToBuy);
