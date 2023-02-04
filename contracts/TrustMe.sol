@@ -157,15 +157,6 @@ contract TrustMe is ERC721Holder {
 		uint value = msg.value;
 		SecurityFunctions.validateConfirmTrade(trade, sender, value);
 
-		// if (IERC20(trade.tokenToBuy).balanceOf(msg.sender) < trade.amountOfTokenToBuy) revert InsufficientBalance();
-		// if (IERC20(trade.tokenToBuy).allowance(msg.sender, address(this)) < trade.amountOfTokenToBuy)
-		// 	revert InsufficientAllowance();
-
-		// if (
-		// 	address(this).balance < trade.amountOfETHToSell ||
-		// 	tradeIdToETHFromSeller[_tradeID] < trade.amountOfETHToSell
-		// ) revert InsufficientBalance();
-
 		if (trade.amountOfTokenToBuy > 0)
 			IERC20(trade.tokenToBuy).safeTransferFrom(msg.sender, trade.seller, trade.amountOfTokenToBuy);
 
@@ -192,6 +183,12 @@ contract TrustMe is ERC721Holder {
 	function cancelTrade(uint256 _tradeID) external {
 		Trade storage trade = tradeIDToTrade[_tradeID];
 		address sender = msg.sender;
+
+		// if (
+		// 	address(this).balance < trade.amountOfETHToSell ||
+		// 	tradeIdToETHFromSeller[_tradeID] < trade.amountOfETHToSell
+		// ) revert InsufficientBalance(); // TODO: i don't think this is needed
+
 		SecurityFunctions.validateCancelTrade(trade, sender);
 
 		if (trade.amountOfTokenToSell > 0)
@@ -225,21 +222,19 @@ contract TrustMe is ERC721Holder {
 		if (index >= pendingTradesIDs.length) return;
 
 		for (uint i = index; i < pendingTradesIDs.length - 1; i++) {
-			pendingTradesIDs[i] = pendingTradesIDs[i + 1]; // isnt this a very expensive method of removing an element? There is no need to maintain the same order and move all elements back one space is there?
+			pendingTradesIDs[i] = pendingTradesIDs[i + 1];
 		}
 		pendingTradesIDs.pop();
 	}
 
 	function withdraw(uint256 _tradeID) external {
 		Trade storage trade = tradeIDToTrade[_tradeID];
-		SecurityFunctions.validateWithdraw(trade, msg.sender);
+		address sender = msg.sender;
+		SecurityFunctions.validateWithdraw(trade, sender);
 		if (
 			address(this).balance < trade.amountOfETHToSell ||
 			tradeIdToETHFromSeller[_tradeID] < trade.amountOfETHToSell
 		) revert InsufficientBalance();
-
-		// if (IERC20(trade.tokenToSell).balanceOf(address(this)) < trade.amountOfTokenToSell)
-		// 	revert InsufficientBalance();
 
 		if (trade.amountOfTokenToSell > 0)
 			IERC20(trade.tokenToSell).safeTransfer(trade.seller, trade.amountOfTokenToSell);
