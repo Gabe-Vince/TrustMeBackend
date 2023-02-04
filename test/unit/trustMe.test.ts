@@ -808,9 +808,9 @@ describe('TrustMe', () => {
 			);
 		});
 		it('Should revert if not seller or buyer', async () => {
-			expect(trustMe.connect(contractsDeployer).cancelTrade(0)).to.be.revertedWithCustomError(
+			await expect(trustMe.connect(contractsDeployer).cancelTrade(0)).to.be.revertedWithCustomError(
 				trustMe,
-				'OnlySeller'
+				'OnlySellerOrBuyer'
 			);
 		});
 		it("Should revert if trade doesn't exist", async () => {

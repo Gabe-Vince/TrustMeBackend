@@ -112,6 +112,15 @@ library Validation {
 		return true;
 	}
 
+	function checkSellerOrBuyer(
+		address addr1,
+		address addr2,
+		address sender
+	) internal pure returns (bool) {
+		if (addr1 != sender && addr1 != sender) revert OnlySellerOrBuyer();
+		return true;
+	}
+
 	function checkDeadline(uint _deadline) internal view returns (bool) {
 		if (_deadline < block.timestamp) revert TradeIsExpired();
 		return true;

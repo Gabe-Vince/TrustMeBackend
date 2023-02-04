@@ -56,7 +56,7 @@ library SecurityFunctions {
 
 	function validateCancelTrade(TrustMe.Trade memory trade, address sender) internal {
 		if (trade.status != TrustMe.TradeStatus.Pending) revert TradeIsNotPending();
-		Validation.checkSeller(trade.seller, sender);
+		Validation.checkSellerOrBuyer(trade.seller, trade.buyer, sender);
 		// Validation.checkNftOwner(trade.addressNFTToSell, sender, trade.tokenIdNFTToSell); //why this check? he will never gonna have the NFT bcoz we already transfered it to the contract in the addTrade function
 		Validation.checkDeadline(trade.deadline);
 	}
