@@ -86,7 +86,8 @@ contract TrustMe is ERC721Holder {
 	/**********
 	 * EVENTS *
 	 **********/
-	event TradeCreated(uint256 indexed tradeID, address indexed seller, address indexed buyer);
+	//  I will need all data except for the status in the Trade created event only for the graph. if possible try not using a struct in the event.
+	event TradeCreated(uint tradeID, address seller, address buyer);
 
 	event TradeConfirmed(uint256 indexed tradeID, address indexed seller, address indexed buyer);
 	event TradeExpired(uint256 indexed tradeID, address indexed seller, address indexed buyer);
@@ -146,7 +147,8 @@ contract TrustMe is ERC721Holder {
 		userToTradesIDs[transactionInput.buyer].push(_tradeId.current());
 		pendingTradesIDs.push(_tradeId.current());
 
-		emit TradeCreated(_tradeId.current(), msg.sender, transactionInput.buyer);
+		// emit TradeCreated(_tradeId.current(), msg.sender, transactionInput.buyer);
+		emit TradeCreated(_tradeId.current(), trade.seller, trade.buyer);
 		_tradeId.increment();
 	}
 

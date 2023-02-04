@@ -53,6 +53,8 @@ const config: HardhatUserConfig = {
 		alphaSort: false,
 		runOnCompile: false,
 		disambiguatePaths: false,
+		strict: true,
+		only: [':TrustMe$', ':SecurityFunctions$', ':Validation$'],
 	},
 	gasReporter: {
 		enabled: process.env.REPORT_GAS == 'true' ?? false,

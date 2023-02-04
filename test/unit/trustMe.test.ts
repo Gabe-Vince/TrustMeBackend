@@ -292,7 +292,7 @@ describe('TrustMe', () => {
 
 		it('Should create trade successfully', async () => {
 			await sellerToken.connect(seller).approve(trustMe.address, parseEther('100'));
-			await trustMe.connect(seller).addTrade(
+			const tx = await trustMe.connect(seller).addTrade(
 				{
 					buyer: buyer.address,
 					tokenToSell: sellerToken.address,
@@ -309,6 +309,27 @@ describe('TrustMe', () => {
 				},
 				{value: parseEther('200')}
 			);
+
+			// await expect(tx)
+			// 	.to.emit(trustMe, 'TradeCreated')
+			// 	.withArgs([
+			// 		buyer.address,
+			// 		sellerToken.address,
+			// 		ethers.constants.AddressZero,
+			// 		0,
+			// 		buyerToken.address,
+			// 		ethers.constants.AddressZero,
+			// 		0,
+			// 		parseEther('200'),
+			// 		parseEther('100'),
+			// 		parseEther('0'),
+			// 		parseEther('100'),
+			// 		600, // 10 mins deadline
+			// 		0,
+			// 	]);
+			expect(tx).to.emit(trustMe, 'TradeCreated');
+			const txReceipt = await tx.wait();
+			// console.log(txReceipt.events?.[2].args);
 			const timestamp = await time.latest();
 
 			const trade = await trustMe.getTrade(0);
