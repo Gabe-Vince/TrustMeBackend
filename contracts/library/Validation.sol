@@ -36,12 +36,22 @@ library Validation {
 	}
 
 	function checkSameToken(address _address1, address _address2) internal pure returns (bool) {
-		if (_address1 == _address2) revert CannotTradeSameToken();
+		if (
+			_address1 == 0x0000000000000000000000000000000000000000 &&
+			_address2 == 0x0000000000000000000000000000000000000000
+		) {
+			return true;
+		} else if (_address1 == _address2) revert CannotTradeSameToken();
 		return true;
 	}
 
 	function checkSameAddress(address _address1, address _address2) internal pure returns (bool) {
-		if (_address1 == _address2) revert CannotTradeWithSelf();
+		if (
+			_address1 == 0x0000000000000000000000000000000000000000 &&
+			_address2 == 0x0000000000000000000000000000000000000000
+		) {
+			return true;
+		} else if (_address1 == _address2) revert CannotTradeWithSelf();
 		return true;
 	}
 
@@ -51,7 +61,10 @@ library Validation {
 	}
 
 	//     if nft addresses is not empty and same, revert
-	function checkNftInputs(address _nftToSell, address _nftToBuy)
+	function checkNftInputs(
+		address _nftToSell,
+		address _nftToBuy
+	)
 		internal
 		pure
 		returns (
@@ -65,11 +78,7 @@ library Validation {
 		return true;
 	}
 
-	function checkEmptyInputs(
-		uint amtAsset1,
-		uint amtAsset2,
-		address asset
-	) internal pure returns (bool) {
+	function checkEmptyInputs(uint amtAsset1, uint amtAsset2, address asset) internal pure returns (bool) {
 		if (amtAsset1 == 0 && amtAsset2 == 0 && asset == address(0)) revert InvalidInputs();
 		return true;
 	}
@@ -79,20 +88,12 @@ library Validation {
 		return true;
 	}
 
-	function checkNftOwner(
-		address _nftAddress,
-		address owner,
-		uint _tokenId
-	) internal view returns (bool) {
+	function checkNftOwner(address _nftAddress, address owner, uint _tokenId) internal view returns (bool) {
 		if (_nftAddress != address(0) && IERC721(_nftAddress).ownerOf(_tokenId) != owner) revert NotNftOwner();
 		return true;
 	}
 
-	function checkNftApproval(
-		address _nftAddress,
-		address to,
-		uint _tokenId
-	) internal view returns (bool) {
+	function checkNftApproval(address _nftAddress, address to, uint _tokenId) internal view returns (bool) {
 		if (checkEmptyAddress(_nftAddress) && IERC721(_nftAddress).getApproved(_tokenId) != to) revert NftNotApproved();
 		return true;
 	}
@@ -112,11 +113,7 @@ library Validation {
 		return true;
 	}
 
-	function checkSellerOrBuyer(
-		address addr1,
-		address addr2,
-		address sender
-	) internal pure returns (bool) {
+	function checkSellerOrBuyer(address addr1, address addr2, address sender) internal pure returns (bool) {
 		if (addr1 != sender && addr1 != sender) revert OnlySellerOrBuyer();
 		return true;
 	}

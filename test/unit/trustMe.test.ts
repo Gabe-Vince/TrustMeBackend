@@ -47,219 +47,587 @@ describe('TrustMe', () => {
 	/*************
 	 * ADD TRADE *
 	 *************/
-	describe('addTrade functionality', () => {
-		it('Should revert if seller,buyer,tokenToSell,tokenToBuy address is 0x0', async () => {
-			await expect(
-				trustMe.connect(seller).addTrade({
-					buyer: ethers.constants.AddressZero,
-					tokenToSell: ethers.constants.AddressZero,
+	describe('addTrade edge cases', () => {
+		it('Edge Case: ETH to Token', async () => {
+			const trade = {
+				tradeId: 0,
+				seller: ethers.constants.AddressZero,
+				buyer: buyer.address,
+				nft: {
 					addressNFTToSell: ethers.constants.AddressZero,
 					tokenIdNFTToSell: 0,
-					tokenToBuy: ethers.constants.AddressZero,
 					addressNFTToBuy: ethers.constants.AddressZero,
 					tokenIdNFTToBuy: 0,
-					amountOfETHToSell: 0,
-					amountOfTokenToSell: parseEther('100'),
+				},
+				token: {
+					tokenToSell: ethers.constants.AddressZero,
+					amountOfTokenToSell: 0,
+					tokenToBuy: buyerToken.address,
+					amountOfTokenToBuy: parseEther('10'),
+				},
+				eth: {
+					amountOfETHToSell: parseEther('1'),
 					amountOfETHToBuy: 0,
-					amountOfTokenToBuy: parseEther('100'),
-					tradePeriod: 600, // 10 mins deadline
-				})
-			).to.be.revertedWithCustomError(trustMe, 'InvalidAddress');
+				},
+				deadline: 600,
+				dateCreated: 0,
+				status: 0,
+			};
+			const tx = await trustMe.connect(seller).addTrade(trade, {value: parseEther('1')});
+			const etherBalance = await ethers.provider.getBalance(trustMe.address);
+			await expect(etherBalance).to.equal(parseEther('1'));
+		});
+		it('Edge Case: ETH to NFT', async () => {
+			const trade = {
+				tradeId: 0,
+				seller: ethers.constants.AddressZero,
+				buyer: buyer.address,
+				nft: {
+					addressNFTToSell: ethers.constants.AddressZero,
+					tokenIdNFTToSell: 0,
+					addressNFTToBuy: buyerNFT.address,
+					tokenIdNFTToBuy: 0,
+				},
+				token: {
+					tokenToSell: ethers.constants.AddressZero,
+					amountOfTokenToSell: 0,
+					tokenToBuy: ethers.constants.AddressZero,
+					amountOfTokenToBuy: 0,
+				},
+				eth: {
+					amountOfETHToSell: parseEther('1'),
+					amountOfETHToBuy: 0,
+				},
+				deadline: 600,
+				dateCreated: 0,
+				status: 0,
+			};
+			const tx = await trustMe.connect(seller).addTrade(trade, {value: parseEther('1')});
+			const etherBalance = await ethers.provider.getBalance(trustMe.address);
+			await expect(etherBalance).to.equal(parseEther('1'));
+		});
+		it('Edge Case: Token to Token', async () => {
+			const trade = {
+				tradeId: 0,
+				seller: ethers.constants.AddressZero,
+				buyer: buyer.address,
+				nft: {
+					addressNFTToSell: ethers.constants.AddressZero,
+					tokenIdNFTToSell: 0,
+					addressNFTToBuy: ethers.constants.AddressZero,
+					tokenIdNFTToBuy: 0,
+				},
+				token: {
+					tokenToSell: sellerToken.address,
+					amountOfTokenToSell: parseEther('10'),
+					tokenToBuy: buyerToken.address,
+					amountOfTokenToBuy: parseEther('10'),
+				},
+				eth: {
+					amountOfETHToSell: 0,
+					amountOfETHToBuy: 0,
+				},
+				deadline: 600,
+				dateCreated: 0,
+				status: 0,
+			};
+			const approve = await sellerToken.connect(seller).approve(trustMe.address, parseEther('10'));
+			const tx = await trustMe.connect(seller).addTrade(trade);
+			const tokenBalance = await sellerToken.balanceOf(trustMe.address);
+			await expect(tokenBalance).to.equal(parseEther('10'));
+		});
+		it('Edge Case: Token to NFT', async () => {
+			const trade = {
+				tradeId: 0,
+				seller: ethers.constants.AddressZero,
+				buyer: buyer.address,
+				nft: {
+					addressNFTToSell: ethers.constants.AddressZero,
+					tokenIdNFTToSell: 0,
+					addressNFTToBuy: buyerNFT.address,
+					tokenIdNFTToBuy: 0,
+				},
+				token: {
+					tokenToSell: sellerToken.address,
+					amountOfTokenToSell: parseEther('10'),
+					tokenToBuy: ethers.constants.AddressZero,
+					amountOfTokenToBuy: parseEther('0'),
+				},
+				eth: {
+					amountOfETHToSell: 0,
+					amountOfETHToBuy: 0,
+				},
+				deadline: 600,
+				dateCreated: 0,
+				status: 0,
+			};
+			const approve = await sellerToken.connect(seller).approve(trustMe.address, parseEther('10'));
+			const tx = await trustMe.connect(seller).addTrade(trade);
+			const tokenBalance = await sellerToken.balanceOf(trustMe.address);
+			await expect(tokenBalance).to.equal(parseEther('10'));
+		});
+		it('Edge Case: Token to ETH', async () => {
+			const trade = {
+				tradeId: 0,
+				seller: ethers.constants.AddressZero,
+				buyer: buyer.address,
+				nft: {
+					addressNFTToSell: ethers.constants.AddressZero,
+					tokenIdNFTToSell: 0,
+					addressNFTToBuy: ethers.constants.AddressZero,
+					tokenIdNFTToBuy: 0,
+				},
+				token: {
+					tokenToSell: sellerToken.address,
+					amountOfTokenToSell: parseEther('10'),
+					tokenToBuy: ethers.constants.AddressZero,
+					amountOfTokenToBuy: parseEther('0'),
+				},
+				eth: {
+					amountOfETHToSell: 0,
+					amountOfETHToBuy: parseEther('1'),
+				},
+				deadline: 600,
+				dateCreated: 0,
+				status: 0,
+			};
+			const approve = await sellerToken.connect(seller).approve(trustMe.address, parseEther('10'));
+			const tx = await trustMe.connect(seller).addTrade(trade);
+			const tokenBalance = await sellerToken.balanceOf(trustMe.address);
+			await expect(tokenBalance).to.equal(parseEther('10'));
+		});
+		it('Edge Case: NFT to Token', async () => {
+			const trade = {
+				tradeId: 0,
+				seller: ethers.constants.AddressZero,
+				buyer: buyer.address,
+				nft: {
+					addressNFTToSell: sellerNFT.address,
+					tokenIdNFTToSell: 0,
+					addressNFTToBuy: ethers.constants.AddressZero,
+					tokenIdNFTToBuy: 0,
+				},
+				token: {
+					tokenToSell: ethers.constants.AddressZero,
+					amountOfTokenToSell: parseEther('0'),
+					tokenToBuy: buyerToken.address,
+					amountOfTokenToBuy: parseEther('10'),
+				},
+				eth: {
+					amountOfETHToSell: 0,
+					amountOfETHToBuy: 0,
+				},
+				deadline: 600,
+				dateCreated: 0,
+				status: 0,
+			};
+			const approve = await sellerNFT.connect(seller).approve(trustMe.address, 0);
+			const tx = await trustMe.connect(seller).addTrade(trade);
+			const nftbalance = await sellerNFT.balanceOf(trustMe.address);
+			await expect(nftbalance).to.equal(1);
+		});
+		it('Edge Case: NFT to ETH', async () => {
+			const trade = {
+				tradeId: 0,
+				seller: ethers.constants.AddressZero,
+				buyer: buyer.address,
+				nft: {
+					addressNFTToSell: sellerNFT.address,
+					tokenIdNFTToSell: 0,
+					addressNFTToBuy: ethers.constants.AddressZero,
+					tokenIdNFTToBuy: 0,
+				},
+				token: {
+					tokenToSell: ethers.constants.AddressZero,
+					amountOfTokenToSell: parseEther('0'),
+					tokenToBuy: ethers.constants.AddressZero,
+					amountOfTokenToBuy: parseEther('0'),
+				},
+				eth: {
+					amountOfETHToSell: 0,
+					amountOfETHToBuy: parseEther('1'),
+				},
+				deadline: 600,
+				dateCreated: 0,
+				status: 0,
+			};
+			const approve = await sellerNFT.connect(seller).approve(trustMe.address, 0);
+			const tx = await trustMe.connect(seller).addTrade(trade);
+			const nftbalance = await sellerNFT.balanceOf(trustMe.address);
+			await expect(nftbalance).to.equal(1);
+		});
+		it('Edge Case: NFT to NFT', async () => {
+			const trade = {
+				tradeId: 0,
+				seller: ethers.constants.AddressZero,
+				buyer: buyer.address,
+				nft: {
+					addressNFTToSell: sellerNFT.address,
+					tokenIdNFTToSell: 0,
+					addressNFTToBuy: buyerNFT.address,
+					tokenIdNFTToBuy: 0,
+				},
+				token: {
+					tokenToSell: ethers.constants.AddressZero,
+					amountOfTokenToSell: parseEther('0'),
+					tokenToBuy: ethers.constants.AddressZero,
+					amountOfTokenToBuy: parseEther('0'),
+				},
+				eth: {
+					amountOfETHToSell: 0,
+					amountOfETHToBuy: 0,
+				},
+				deadline: 600,
+				dateCreated: 0,
+				status: 0,
+			};
+			const approve = await sellerNFT.connect(seller).approve(trustMe.address, 0);
+			const tx = await trustMe.connect(seller).addTrade(trade);
+			const nftbalance = await sellerNFT.balanceOf(trustMe.address);
+			await expect(nftbalance).to.equal(1);
+		});
+	});
+
+	describe('addTrade functionality', () => {
+		it('Should revert if seller,buyer,tokenToSell,tokenToBuy address is 0x0', async () => {
+			const trade = {
+				tradeId: 0,
+				seller: ethers.constants.AddressZero,
+				buyer: ethers.constants.AddressZero,
+				nft: {
+					addressNFTToSell: ethers.constants.AddressZero,
+					tokenIdNFTToSell: 0,
+					addressNFTToBuy: ethers.constants.AddressZero,
+					tokenIdNFTToBuy: 0,
+				},
+				token: {
+					tokenToSell: ethers.constants.AddressZero,
+					amountOfTokenToSell: parseEther('10'),
+					tokenToBuy: ethers.constants.AddressZero,
+					amountOfTokenToBuy: parseEther('10'),
+				},
+				eth: {
+					amountOfETHToSell: 0,
+					amountOfETHToBuy: 0,
+				},
+				deadline: 600,
+				dateCreated: 0,
+				status: 0,
+			};
+			await expect(trustMe.connect(seller).addTrade(trade)).to.be.revertedWithCustomError(
+				trustMe,
+				'InvalidAddress'
+			);
+			console.log(ethers.constants.AddressZero);
+			console.log(parseEther('100'));
 		});
 
 		it('Should revert if tokenToBuy is same as tokenToSell', async () => {
-			await expect(
-				trustMe.connect(seller).addTrade({
-					buyer: buyer.address,
-					tokenToSell: sellerToken.address,
+			const trade = {
+				tradeId: 0,
+				seller: ethers.constants.AddressZero,
+				buyer: buyer.address,
+				nft: {
 					addressNFTToSell: ethers.constants.AddressZero,
 					tokenIdNFTToSell: 0,
-					tokenToBuy: sellerToken.address,
 					addressNFTToBuy: ethers.constants.AddressZero,
 					tokenIdNFTToBuy: 0,
+				},
+				token: {
+					tokenToSell: sellerToken.address,
+					amountOfTokenToSell: parseEther('10'),
+					tokenToBuy: sellerToken.address,
+					amountOfTokenToBuy: parseEther('10'),
+				},
+				eth: {
 					amountOfETHToSell: 0,
-					amountOfTokenToSell: parseEther('100'),
 					amountOfETHToBuy: 0,
-					amountOfTokenToBuy: parseEther('100'),
-					tradePeriod: 600, // 10 mins deadline
-				})
-			).to.be.revertedWithCustomError(trustMe, 'CannotTradeSameToken');
+				},
+				deadline: 600,
+				dateCreated: 0,
+				status: 0,
+			};
+			await expect(trustMe.connect(seller).addTrade(trade)).to.be.revertedWithCustomError(
+				trustMe,
+				'CannotTradeSameToken'
+			);
 		});
 		it('Should revert if seller is trying to both sell and buy ETH at the same time', async () => {
-			await expect(
-				trustMe.connect(seller).addTrade({
-					buyer: buyer.address,
-					tokenToSell: sellerToken.address,
+			const trade = {
+				tradeId: 0,
+				seller: ethers.constants.AddressZero,
+				buyer: buyer.address,
+				nft: {
 					addressNFTToSell: ethers.constants.AddressZero,
 					tokenIdNFTToSell: 0,
-					tokenToBuy: buyerToken.address,
 					addressNFTToBuy: ethers.constants.AddressZero,
 					tokenIdNFTToBuy: 0,
-					amountOfETHToSell: parseEther('100'),
-					amountOfTokenToSell: parseEther('100'),
-					amountOfETHToBuy: parseEther('200'),
-					amountOfTokenToBuy: parseEther('100'),
-					tradePeriod: 600, // 10 mins deadline
-				})
-			).to.be.revertedWithCustomError(trustMe, 'InvalidInputs');
+				},
+				token: {
+					tokenToSell: sellerToken.address,
+					amountOfTokenToSell: parseEther('10'),
+					tokenToBuy: buyerToken.address,
+					amountOfTokenToBuy: parseEther('10'),
+				},
+				eth: {
+					amountOfETHToSell: parseEther('1'),
+					amountOfETHToBuy: parseEther('1'),
+				},
+				deadline: 600,
+				dateCreated: 0,
+				status: 0,
+			};
+			await expect(trustMe.connect(seller).addTrade(trade)).to.be.revertedWithCustomError(
+				trustMe,
+				'InvalidInputs'
+			);
 		});
 
 		it('Should revert if seller and buyer is same', async () => {
-			await expect(
-				trustMe.connect(seller).addTrade({
-					buyer: seller.address,
-					tokenToSell: sellerToken.address,
+			const trade = {
+				tradeId: 0,
+				seller: ethers.constants.AddressZero,
+				buyer: seller.address,
+				nft: {
 					addressNFTToSell: ethers.constants.AddressZero,
 					tokenIdNFTToSell: 0,
-					tokenToBuy: buyerToken.address,
 					addressNFTToBuy: ethers.constants.AddressZero,
 					tokenIdNFTToBuy: 0,
+				},
+				token: {
+					tokenToSell: sellerToken.address,
+					amountOfTokenToSell: parseEther('10'),
+					tokenToBuy: sellerToken.address,
+					amountOfTokenToBuy: parseEther('10'),
+				},
+				eth: {
 					amountOfETHToSell: 0,
-					amountOfTokenToSell: parseEther('100'),
 					amountOfETHToBuy: 0,
-					amountOfTokenToBuy: parseEther('100'),
-					tradePeriod: (await time.latest()) + 600, // 10 mins deadline
-				})
-			).to.be.revertedWithCustomError(trustMe, 'CannotTradeWithSelf');
+				},
+				deadline: 600,
+				dateCreated: 0,
+				status: 0,
+			};
+			await expect(trustMe.connect(seller).addTrade(trade)).to.be.revertedWithCustomError(
+				trustMe,
+				'CannotTradeWithSelf'
+			);
 		});
 		it('Should revert if amount of tokenToSell and amount of ETH to sell is 0 and seller transfers no NFT', async () => {
-			await expect(
-				trustMe.connect(seller).addTrade({
-					buyer: buyer.address,
-					tokenToSell: sellerToken.address,
+			const trade = {
+				tradeId: 0,
+				seller: ethers.constants.AddressZero,
+				buyer: buyer.address,
+				nft: {
 					addressNFTToSell: ethers.constants.AddressZero,
 					tokenIdNFTToSell: 0,
-					tokenToBuy: buyerToken.address,
 					addressNFTToBuy: ethers.constants.AddressZero,
 					tokenIdNFTToBuy: 0,
-					amountOfETHToSell: parseEther('0'),
-					amountOfTokenToSell: parseEther('0'),
-					amountOfETHToBuy: parseEther('100'),
-					amountOfTokenToBuy: parseEther('100'),
-					tradePeriod: (await time.latest()) + 600, // 10 mins deadline
-				})
-			).to.be.revertedWithCustomError(trustMe, 'InvalidInputs');
+				},
+				token: {
+					tokenToSell: sellerToken.address,
+					amountOfTokenToSell: 0,
+					tokenToBuy: buyerToken.address,
+					amountOfTokenToBuy: 0,
+				},
+				eth: {
+					amountOfETHToSell: 0,
+					amountOfETHToBuy: parseEther('1'),
+				},
+				deadline: 600,
+				dateCreated: 0,
+				status: 0,
+			};
+
+			await expect(trustMe.connect(seller).addTrade(trade)).to.be.revertedWithCustomError(
+				trustMe,
+				'InvalidInputs'
+			);
 		});
 		it('Should revert if amount of tokenToBuy and amount of ETH to buy is 0 and no NFT is bought', async () => {
-			await expect(
-				trustMe.connect(seller).addTrade({
-					buyer: buyer.address,
-					tokenToSell: sellerToken.address,
+			const trade = {
+				tradeId: 0,
+				seller: ethers.constants.AddressZero,
+				buyer: buyer.address,
+				nft: {
 					addressNFTToSell: ethers.constants.AddressZero,
 					tokenIdNFTToSell: 0,
-					tokenToBuy: buyerToken.address,
 					addressNFTToBuy: ethers.constants.AddressZero,
 					tokenIdNFTToBuy: 0,
-					amountOfETHToSell: parseEther('100'),
+				},
+				token: {
+					tokenToSell: sellerToken.address,
 					amountOfTokenToSell: parseEther('100'),
-					amountOfETHToBuy: parseEther('0'),
-					amountOfTokenToBuy: parseEther('0'),
-					tradePeriod: (await time.latest()) + 600, // 10 mins deadline
-				})
-			).to.be.revertedWithCustomError(trustMe, 'InvalidInputs');
+					tokenToBuy: buyerToken.address,
+					amountOfTokenToBuy: 0,
+				},
+				eth: {
+					amountOfETHToSell: parseEther('1'),
+					amountOfETHToBuy: 0,
+				},
+				deadline: 600,
+				dateCreated: 0,
+				status: 0,
+			};
+
+			await expect(trustMe.connect(seller).addTrade(trade)).to.be.revertedWithCustomError(
+				trustMe,
+				'InvalidInputs'
+			);
 		});
 		it("Should revert if Seller doesn't have enough tokenToSell", async () => {
-			await expect(
-				trustMe.connect(seller).addTrade({
-					buyer: buyer.address,
-					tokenToSell: sellerToken.address,
+			const trade = {
+				tradeId: 0,
+				seller: ethers.constants.AddressZero,
+				buyer: buyer.address,
+				nft: {
 					addressNFTToSell: ethers.constants.AddressZero,
 					tokenIdNFTToSell: 0,
-					tokenToBuy: buyerToken.address,
 					addressNFTToBuy: ethers.constants.AddressZero,
 					tokenIdNFTToBuy: 0,
-					amountOfETHToSell: 0, //here i made a change
-					amountOfTokenToSell: parseEther('100000'),
-					amountOfETHToBuy: parseEther('0'),
-					amountOfTokenToBuy: parseEther('300'),
-					tradePeriod: (await time.latest()) + 600, // 10 mins deadline
-				})
-			).to.be.revertedWith('ERC20: insufficient allowance');
+				},
+				token: {
+					tokenToSell: sellerToken.address,
+					amountOfTokenToSell: parseEther('1000000'),
+					tokenToBuy: buyerToken.address,
+					amountOfTokenToBuy: parseEther('10'),
+				},
+				eth: {
+					amountOfETHToSell: parseEther('0'),
+					amountOfETHToBuy: 0,
+				},
+				deadline: 600,
+				dateCreated: 0,
+				status: 0,
+			};
+
+			await expect(trustMe.connect(seller).addTrade(trade)).to.be.revertedWith('ERC20: insufficient allowance');
 		});
 
 		it("Should revert if Seller doesn't have the NFT to sell", async () => {
+			const trade = {
+				tradeId: 0,
+				seller: ethers.constants.AddressZero,
+				buyer: buyer.address,
+				nft: {
+					addressNFTToSell: sellerNFT.address,
+					tokenIdNFTToSell: 0,
+					addressNFTToBuy: ethers.constants.AddressZero,
+					tokenIdNFTToBuy: 0,
+				},
+				token: {
+					tokenToSell: sellerToken.address,
+					amountOfTokenToSell: parseEther('100'),
+					tokenToBuy: buyerToken.address,
+					amountOfTokenToBuy: parseEther('100'),
+				},
+				eth: {
+					amountOfETHToSell: parseEther('10'),
+					amountOfETHToBuy: 0,
+				},
+				deadline: 600,
+				dateCreated: 0,
+				status: 0,
+			};
+
 			const tx = await sellerNFT
 				.connect(seller)
 				['safeTransferFrom(address,address,uint256)'](seller.address, contractsDeployer.address, 0);
 			await tx.wait();
-			await expect(
-				trustMe.connect(seller).addTrade({
-					buyer: buyer.address,
-					tokenToSell: sellerToken.address,
-					addressNFTToSell: sellerNFT.address,
-					tokenIdNFTToSell: 0,
-					tokenToBuy: buyerToken.address,
-					addressNFTToBuy: ethers.constants.AddressZero,
-					tokenIdNFTToBuy: 0,
-					amountOfETHToSell: parseEther('10000'),
-					amountOfTokenToSell: parseEther('100'),
-					amountOfETHToBuy: parseEther('0'),
-					amountOfTokenToBuy: parseEther('100'),
-					tradePeriod: (await time.latest()) + 600, // 10 mins deadline
-				})
-			).to.be.revertedWithCustomError(trustMe, 'NotNftOwner');
+			await expect(trustMe.connect(seller).addTrade(trade)).to.be.revertedWithCustomError(trustMe, 'NotNftOwner');
 		});
 
 		it("Should revert if Seller doesn't have enough ETH", async () => {
-			await expect(
-				trustMe.connect(seller).addTrade({
-					buyer: buyer.address,
-					tokenToSell: sellerToken.address,
-					addressNFTToSell: ethers.constants.AddressZero,
+			const trade = {
+				tradeId: 0,
+				seller: ethers.constants.AddressZero,
+				buyer: buyer.address,
+				nft: {
+					addressNFTToSell: sellerNFT.address,
 					tokenIdNFTToSell: 0,
-					tokenToBuy: buyerToken.address,
 					addressNFTToBuy: ethers.constants.AddressZero,
 					tokenIdNFTToBuy: 0,
-					amountOfETHToSell: parseEther('100000'),
+				},
+				token: {
+					tokenToSell: sellerToken.address,
 					amountOfTokenToSell: parseEther('100'),
-					amountOfETHToBuy: parseEther('0'),
+					tokenToBuy: buyerToken.address,
 					amountOfTokenToBuy: parseEther('100'),
-					tradePeriod: (await time.latest()) + 600, // 10 mins deadline
-				})
-			).to.be.revertedWithCustomError(trustMe, 'IncorrectAmoutOfETHTransferred');
+				},
+				eth: {
+					amountOfETHToSell: parseEther('10000'),
+					amountOfETHToBuy: 0,
+				},
+				deadline: 600,
+				dateCreated: 0,
+				status: 0,
+			};
+
+			await expect(trustMe.connect(seller).addTrade(trade)).to.be.revertedWithCustomError(
+				trustMe,
+				'IncorrectAmoutOfETHTransferred'
+			);
 		});
 
 		it('Should revert if Seller did not transfer to the contract the required amount of ETH to sell', async () => {
+			const trade = {
+				tradeId: 0,
+				seller: ethers.constants.AddressZero,
+				buyer: buyer.address,
+				nft: {
+					addressNFTToSell: sellerNFT.address,
+					tokenIdNFTToSell: 0,
+					addressNFTToBuy: ethers.constants.AddressZero,
+					tokenIdNFTToBuy: 0,
+				},
+				token: {
+					tokenToSell: sellerToken.address,
+					amountOfTokenToSell: parseEther('100'),
+					tokenToBuy: buyerToken.address,
+					amountOfTokenToBuy: parseEther('100'),
+				},
+				eth: {
+					amountOfETHToSell: parseEther('200'),
+					amountOfETHToBuy: 0,
+				},
+				deadline: 600,
+				dateCreated: 0,
+				status: 0,
+			};
+
 			await expect(
-				trustMe.connect(seller).addTrade(
-					{
-						buyer: buyer.address,
-						tokenToSell: sellerToken.address,
-						addressNFTToSell: ethers.constants.AddressZero,
-						tokenIdNFTToSell: 0,
-						tokenToBuy: buyerToken.address,
-						addressNFTToBuy: ethers.constants.AddressZero,
-						tokenIdNFTToBuy: 0,
-						amountOfETHToSell: parseEther('200'),
-						amountOfTokenToSell: parseEther('100'),
-						amountOfETHToBuy: parseEther('0'),
-						amountOfTokenToBuy: parseEther('100'),
-						tradePeriod: (await time.latest()) + 600, // 10 mins deadline
-					},
-					{value: parseEther('100')}
-				)
+				trustMe.connect(seller).addTrade(trade, {value: parseEther('100')})
 			).to.be.revertedWithCustomError(trustMe, 'IncorrectAmoutOfETHTransferred');
 		});
 
 		it('Should add trade to state variables', async () => {
-			await sellerToken.connect(seller).approve(trustMe.address, parseEther('100'));
-			const tx = await trustMe.connect(seller).addTrade(
-				{
-					buyer: buyer.address,
-					tokenToSell: sellerToken.address,
+			const trade = {
+				tradeId: 0,
+				seller: ethers.constants.AddressZero,
+				buyer: buyer.address,
+				nft: {
 					addressNFTToSell: ethers.constants.AddressZero,
 					tokenIdNFTToSell: 0,
-					tokenToBuy: buyerToken.address,
 					addressNFTToBuy: ethers.constants.AddressZero,
 					tokenIdNFTToBuy: 0,
-					amountOfETHToSell: parseEther('200'),
-					amountOfTokenToSell: parseEther('100'),
-					amountOfETHToBuy: parseEther('0'),
-					amountOfTokenToBuy: parseEther('100'),
-					tradePeriod: (await time.latest()) + 600, // 10 mins deadline
 				},
-				{value: parseEther('200')}
-			);
+				token: {
+					tokenToSell: sellerToken.address,
+					amountOfTokenToSell: parseEther('100'),
+					tokenToBuy: buyerToken.address,
+					amountOfTokenToBuy: parseEther('100'),
+				},
+				eth: {
+					amountOfETHToSell: parseEther('200'),
+					amountOfETHToBuy: 0,
+				},
+				deadline: 600,
+				dateCreated: 0,
+				status: 0,
+			};
+
+			await sellerToken.connect(seller).approve(trustMe.address, parseEther('100'));
+			const tx = await trustMe.connect(seller).addTrade(trade, {value: parseEther('200')});
 			const sellerId = await trustMe.getTradesIDsByUser(seller.address);
 			const buyerId = await trustMe.getTradesIDsByUser(buyer.address);
 			expect(sellerId).to.have.lengthOf(1);
@@ -267,48 +635,63 @@ describe('TrustMe', () => {
 		});
 
 		it('Should emit TradeCreated event if trade is created successfully', async () => {
-			await sellerToken.connect(seller).approve(trustMe.address, parseEther('100'));
-			const tx = await trustMe.connect(seller).addTrade(
-				{
-					buyer: buyer.address,
-					tokenToSell: sellerToken.address,
+			const trade = {
+				tradeId: 0,
+				seller: ethers.constants.AddressZero,
+				buyer: buyer.address,
+				nft: {
 					addressNFTToSell: ethers.constants.AddressZero,
 					tokenIdNFTToSell: 0,
-					tokenToBuy: buyerToken.address,
 					addressNFTToBuy: ethers.constants.AddressZero,
 					tokenIdNFTToBuy: 0,
-					amountOfETHToSell: parseEther('200'),
-					amountOfTokenToSell: parseEther('100'),
-					amountOfETHToBuy: parseEther('0'),
-					amountOfTokenToBuy: parseEther('100'),
-					tradePeriod: (await time.latest()) + 600, // 10 mins deadline
 				},
-				{value: parseEther('200')}
-			);
-			const timestamp = await time.latest();
-			const trade = await trustMe.getTrade(0);
-			await expect(tx).to.emit(trustMe, 'TradeCreated').withArgs(trade.id, seller.address, buyer.address);
+				token: {
+					tokenToSell: sellerToken.address,
+					amountOfTokenToSell: parseEther('100'),
+					tokenToBuy: buyerToken.address,
+					amountOfTokenToBuy: parseEther('100'),
+				},
+				eth: {
+					amountOfETHToSell: parseEther('200'),
+					amountOfETHToBuy: 0,
+				},
+				deadline: 600,
+				dateCreated: 0,
+				status: 0,
+			};
+			await sellerToken.connect(seller).approve(trustMe.address, parseEther('100'));
+			const tx = await trustMe.connect(seller).addTrade(trade, {value: parseEther('200')});
+			const tradeObj = await trustMe.getTrade(0);
+			await expect(tx).to.emit(trustMe, 'TradeCreated');
 		});
 
 		it('Should create trade successfully', async () => {
-			await sellerToken.connect(seller).approve(trustMe.address, parseEther('100'));
-			const tx = await trustMe.connect(seller).addTrade(
-				{
-					buyer: buyer.address,
-					tokenToSell: sellerToken.address,
+			const trade = {
+				tradeId: 0,
+				seller: ethers.constants.AddressZero,
+				buyer: buyer.address,
+				nft: {
 					addressNFTToSell: ethers.constants.AddressZero,
 					tokenIdNFTToSell: 0,
-					tokenToBuy: buyerToken.address,
 					addressNFTToBuy: ethers.constants.AddressZero,
 					tokenIdNFTToBuy: 0,
-					amountOfETHToSell: parseEther('200'),
-					amountOfTokenToSell: parseEther('100'),
-					amountOfETHToBuy: parseEther('0'),
-					amountOfTokenToBuy: parseEther('100'),
-					tradePeriod: 600, // 10 mins deadline
 				},
-				{value: parseEther('200')}
-			);
+				token: {
+					tokenToSell: sellerToken.address,
+					amountOfTokenToSell: parseEther('100'),
+					tokenToBuy: buyerToken.address,
+					amountOfTokenToBuy: parseEther('100'),
+				},
+				eth: {
+					amountOfETHToSell: parseEther('200'),
+					amountOfETHToBuy: 0,
+				},
+				deadline: 600,
+				dateCreated: 0,
+				status: 0,
+			};
+			await sellerToken.connect(seller).approve(trustMe.address, parseEther('100'));
+			const tx = await trustMe.connect(seller).addTrade(trade, {value: parseEther('200')});
 
 			// await expect(tx)
 			// 	.to.emit(trustMe, 'TradeCreated')
@@ -332,108 +715,139 @@ describe('TrustMe', () => {
 			// console.log(txReceipt.events?.[2].args);
 			const timestamp = await time.latest();
 
-			const trade = await trustMe.getTrade(0);
-			expect(trade.seller).to.equal(seller.address);
-			expect(trade.buyer).to.equal(buyer.address);
-			expect(trade.tokenToSell).to.equal(sellerToken.address);
-			expect(trade.tokenToBuy).to.equal(buyerToken.address);
-			expect(trade.amountOfETHToSell).to.equal(parseEther('200'));
-			expect(trade.amountOfTokenToSell).to.equal(parseEther('100'));
-			expect(trade.amountOfETHToBuy).to.equal(parseEther('0'));
-			expect(trade.amountOfTokenToBuy).to.equal(parseEther('100'));
-			expect(trade.deadline).to.equal(timestamp + 600);
+			const tradeObj = await trustMe.getTrade(0);
+			expect(tradeObj.seller).to.equal(seller.address);
+			expect(tradeObj.buyer).to.equal(buyer.address);
+			expect(tradeObj.token.tokenToSell).to.equal(sellerToken.address);
+			expect(tradeObj.token.tokenToBuy).to.equal(buyerToken.address);
+			expect(tradeObj.eth.amountOfETHToSell).to.equal(parseEther('200'));
+			expect(tradeObj.token.amountOfTokenToSell).to.equal(parseEther('100'));
+			expect(tradeObj.eth.amountOfETHToBuy).to.equal(parseEther('0'));
+			expect(tradeObj.token.amountOfTokenToBuy).to.equal(parseEther('100'));
+			expect(tradeObj.deadline).to.equal(timestamp + 600);
 		});
 
 		it('Should transfer seller token to contract', async () => {
-			await sellerToken.connect(seller).approve(trustMe.address, parseEther('100'));
-			await trustMe.connect(seller).addTrade(
-				{
-					buyer: buyer.address,
-					tokenToSell: sellerToken.address,
+			const trade = {
+				tradeId: 0,
+				seller: ethers.constants.AddressZero,
+				buyer: buyer.address,
+				nft: {
 					addressNFTToSell: ethers.constants.AddressZero,
 					tokenIdNFTToSell: 0,
-					tokenToBuy: buyerToken.address,
 					addressNFTToBuy: ethers.constants.AddressZero,
 					tokenIdNFTToBuy: 0,
-					amountOfETHToSell: parseEther('200'),
-					amountOfTokenToSell: parseEther('100'),
-					amountOfETHToBuy: parseEther('0'),
-					amountOfTokenToBuy: parseEther('100'),
-					tradePeriod: 600, // 10 mins deadline
 				},
-				{value: parseEther('200')}
-			);
+				token: {
+					tokenToSell: sellerToken.address,
+					amountOfTokenToSell: parseEther('100'),
+					tokenToBuy: buyerToken.address,
+					amountOfTokenToBuy: parseEther('100'),
+				},
+				eth: {
+					amountOfETHToSell: parseEther('200'),
+					amountOfETHToBuy: 0,
+				},
+				deadline: 600,
+				dateCreated: 0,
+				status: 0,
+			};
+			await sellerToken.connect(seller).approve(trustMe.address, parseEther('100'));
+			await trustMe.connect(seller).addTrade(trade, {value: parseEther('200')});
 			const sellerBalance = await sellerToken.balanceOf(trustMe.address);
 			expect(sellerBalance).to.equal(parseEther('100'));
 		});
 		it('Should transfer seller NFT to contract', async () => {
-			await sellerToken.connect(seller).approve(trustMe.address, parseEther('100'));
-			await sellerNFT.connect(seller).approve(trustMe.address, 0);
-			await trustMe.connect(seller).addTrade(
-				{
-					buyer: buyer.address,
-					tokenToSell: sellerToken.address,
+			const trade = {
+				tradeId: 0,
+				seller: ethers.constants.AddressZero,
+				buyer: buyer.address,
+				nft: {
 					addressNFTToSell: sellerNFT.address,
 					tokenIdNFTToSell: 0,
-					tokenToBuy: buyerToken.address,
 					addressNFTToBuy: ethers.constants.AddressZero,
 					tokenIdNFTToBuy: 0,
-					amountOfETHToSell: parseEther('200'),
-					amountOfTokenToSell: parseEther('100'),
-					amountOfETHToBuy: parseEther('0'),
-					amountOfTokenToBuy: parseEther('100'),
-					tradePeriod: 600, // 10 mins deadline
 				},
-				{value: parseEther('200')}
-			);
+				token: {
+					tokenToSell: ethers.constants.AddressZero,
+					amountOfTokenToSell: 0,
+					tokenToBuy: ethers.constants.AddressZero,
+					amountOfTokenToBuy: 0,
+				},
+				eth: {
+					amountOfETHToSell: 0,
+					amountOfETHToBuy: parseEther('0.1'),
+				},
+				deadline: 600,
+				dateCreated: 0,
+				status: 0,
+			};
+			// await sellerToken.connect(seller).approve(trustMe.address, parseEther('100'));
+			await sellerNFT.connect(seller).approve(trustMe.address, 0);
+			await trustMe.connect(seller).addTrade(trade);
 			const NFTOwner = await sellerNFT.ownerOf(0);
 			expect(NFTOwner).to.equal(trustMe.address);
 		});
 
 		it('Should transfer sellers ETHToSell to contract', async () => {
-			await sellerToken.connect(seller).approve(trustMe.address, parseEther('100'));
-			await trustMe.connect(seller).addTrade(
-				{
-					buyer: buyer.address,
-					tokenToSell: sellerToken.address,
+			const trade = {
+				tradeId: 0,
+				seller: ethers.constants.AddressZero,
+				buyer: buyer.address,
+				nft: {
 					addressNFTToSell: ethers.constants.AddressZero,
 					tokenIdNFTToSell: 0,
-					tokenToBuy: buyerToken.address,
 					addressNFTToBuy: ethers.constants.AddressZero,
 					tokenIdNFTToBuy: 0,
-					amountOfETHToSell: parseEther('200'),
-					amountOfTokenToSell: parseEther('100'),
-					amountOfETHToBuy: parseEther('0'),
-					amountOfTokenToBuy: parseEther('100'),
-					tradePeriod: 600, // 10 mins deadline
 				},
-				{value: parseEther('200')}
-			);
-			console.log(sellerToken.address);
-			console.log(ethers.constants.AddressZero);
+				token: {
+					tokenToSell: sellerToken.address,
+					amountOfTokenToSell: parseEther('100'),
+					tokenToBuy: buyerToken.address,
+					amountOfTokenToBuy: parseEther('100'),
+				},
+				eth: {
+					amountOfETHToSell: parseEther('200'),
+					amountOfETHToBuy: 0,
+				},
+				deadline: 600,
+				dateCreated: 0,
+				status: 0,
+			};
+			await sellerToken.connect(seller).approve(trustMe.address, parseEther('100'));
+			await trustMe.connect(seller).addTrade(trade, {value: parseEther('200')});
+
 			const contractETHBalance = await ethers.provider.getBalance(trustMe.address);
 			expect(contractETHBalance).to.equal(parseEther('200'));
 		});
 
 		it('Should ascribe sellers ETH to sellers ETH balance in contract', async () => {
-			await sellerToken.connect(seller).approve(trustMe.address, parseEther('100'));
-			await trustMe.connect(seller).addTrade(
-				{
-					buyer: buyer.address,
-					tokenToSell: sellerToken.address,
+			const trade = {
+				tradeId: 0,
+				seller: ethers.constants.AddressZero,
+				buyer: buyer.address,
+				nft: {
 					addressNFTToSell: ethers.constants.AddressZero,
 					tokenIdNFTToSell: 0,
-					tokenToBuy: buyerToken.address,
 					addressNFTToBuy: ethers.constants.AddressZero,
 					tokenIdNFTToBuy: 0,
-					amountOfETHToSell: parseEther('200'),
-					amountOfTokenToSell: parseEther('100'),
-					amountOfETHToBuy: parseEther('0'),
-					amountOfTokenToBuy: parseEther('100'),
-					tradePeriod: 600, // 10 mins deadline
 				},
-				{value: parseEther('200')}
-			);
+				token: {
+					tokenToSell: sellerToken.address,
+					amountOfTokenToSell: parseEther('100'),
+					tokenToBuy: buyerToken.address,
+					amountOfTokenToBuy: parseEther('100'),
+				},
+				eth: {
+					amountOfETHToSell: parseEther('200'),
+					amountOfETHToBuy: 0,
+				},
+				deadline: 600,
+				dateCreated: 0,
+				status: 0,
+			};
+			await sellerToken.connect(seller).approve(trustMe.address, parseEther('100'));
+			await trustMe.connect(seller).addTrade(trade, {value: parseEther('200')});
 			const sellersETHBalanceInContract = await trustMe.tradeIdToETHFromSeller(0);
 
 			expect(sellersETHBalanceInContract).to.equal(parseEther('200'));
@@ -447,23 +861,31 @@ describe('TrustMe', () => {
 			beforeEach(async () => {
 				await sellerToken.connect(seller).approve(trustMe.address, parseEther('1000'));
 				await sellerNFT.connect(seller).approve(trustMe.address, 0);
-				const addTrade = await trustMe.connect(seller).addTrade(
-					{
-						buyer: buyer.address,
-						tokenToSell: sellerToken.address,
+				const trade = {
+					tradeId: 0,
+					seller: ethers.constants.AddressZero,
+					buyer: buyer.address,
+					nft: {
 						addressNFTToSell: sellerNFT.address,
 						tokenIdNFTToSell: 0,
-						tokenToBuy: buyerToken.address,
 						addressNFTToBuy: buyerNFT.address,
 						tokenIdNFTToBuy: 0,
-						amountOfETHToSell: parseEther('9000'),
-						amountOfTokenToSell: parseEther('1000'),
-						amountOfETHToBuy: parseEther('0'),
-						amountOfTokenToBuy: parseEther('1000'),
-						tradePeriod: 600, // 10 mins deadline
 					},
-					{value: parseEther('9000')}
-				);
+					token: {
+						tokenToSell: sellerToken.address,
+						amountOfTokenToSell: parseEther('1000'),
+						tokenToBuy: buyerToken.address,
+						amountOfTokenToBuy: parseEther('1000'),
+					},
+					eth: {
+						amountOfETHToSell: parseEther('9000'),
+						amountOfETHToBuy: 0,
+					},
+					deadline: 600,
+					dateCreated: 0,
+					status: 0,
+				};
+				const addTrade = await trustMe.connect(seller).addTrade(trade, {value: parseEther('9000')});
 				await addTrade.wait();
 			});
 
@@ -613,23 +1035,31 @@ describe('TrustMe', () => {
 			beforeEach(async () => {
 				await sellerToken.connect(seller).approve(trustMe.address, parseEther('100'));
 				await sellerNFT.connect(seller).approve(trustMe.address, 0);
-				const addTrade = await trustMe.connect(seller).addTrade(
-					{
-						buyer: buyer.address,
-						tokenToSell: sellerToken.address,
+				const trade = {
+					tradeId: 0,
+					seller: ethers.constants.AddressZero,
+					buyer: buyer.address,
+					nft: {
 						addressNFTToSell: sellerNFT.address,
 						tokenIdNFTToSell: 0,
-						tokenToBuy: buyerToken.address,
 						addressNFTToBuy: buyerNFT.address,
 						tokenIdNFTToBuy: 0,
-						amountOfETHToSell: parseEther('0'),
-						amountOfTokenToSell: parseEther('100'),
-						amountOfETHToBuy: parseEther('6000'),
-						amountOfTokenToBuy: parseEther('100'),
-						tradePeriod: 600, // 10 mins deadline
 					},
-					{value: parseEther('0')}
-				);
+					token: {
+						tokenToSell: sellerToken.address,
+						amountOfTokenToSell: parseEther('100'),
+						tokenToBuy: buyerToken.address,
+						amountOfTokenToBuy: parseEther('100'),
+					},
+					eth: {
+						amountOfETHToSell: parseEther('0'),
+						amountOfETHToBuy: parseEther('6000'),
+					},
+					deadline: 600,
+					dateCreated: 0,
+					status: 0,
+				};
+				const addTrade = await trustMe.connect(seller).addTrade(trade, {value: parseEther('0')});
 				await addTrade.wait();
 			});
 
@@ -789,23 +1219,31 @@ describe('TrustMe', () => {
 		beforeEach(async () => {
 			await sellerToken.connect(seller).approve(trustMe.address, parseEther('100'));
 			await sellerNFT.connect(seller).approve(trustMe.address, 0);
-			await trustMe.connect(seller).addTrade(
-				{
-					buyer: buyer.address,
-					tokenToSell: sellerToken.address,
+			const trade = {
+				tradeId: 0,
+				seller: ethers.constants.AddressZero,
+				buyer: buyer.address,
+				nft: {
 					addressNFTToSell: sellerNFT.address,
 					tokenIdNFTToSell: 0,
-					tokenToBuy: buyerToken.address,
 					addressNFTToBuy: buyerNFT.address,
 					tokenIdNFTToBuy: 0,
-					amountOfETHToSell: parseEther('9000'),
-					amountOfTokenToSell: parseEther('100'),
-					amountOfETHToBuy: parseEther('0'),
-					amountOfTokenToBuy: parseEther('100'),
-					tradePeriod: 600, // 10 mins deadline
 				},
-				{value: parseEther('9000')}
-			);
+				token: {
+					tokenToSell: sellerToken.address,
+					amountOfTokenToSell: parseEther('100'),
+					tokenToBuy: buyerToken.address,
+					amountOfTokenToBuy: parseEther('100'),
+				},
+				eth: {
+					amountOfETHToSell: parseEther('9000'),
+					amountOfETHToBuy: 0,
+				},
+				deadline: 600,
+				dateCreated: 0,
+				status: 0,
+			};
+			await trustMe.connect(seller).addTrade(trade, {value: parseEther('9000')});
 		});
 		it('Should revert if not seller or buyer', async () => {
 			await expect(trustMe.connect(contractsDeployer).cancelTrade(0)).to.be.revertedWithCustomError(
@@ -872,23 +1310,31 @@ describe('TrustMe', () => {
 				const txMnt = await sellerNFT.mint(seller.address);
 				await txMnt.wait();
 				await sellerNFT.connect(seller).approve(trustMe.address, i + 1);
-				let tx = await trustMe.connect(seller).addTrade(
-					{
-						buyer: buyer.address,
-						tokenToSell: sellerToken.address,
+				const trade = {
+					tradeId: 0,
+					seller: ethers.constants.AddressZero,
+					buyer: buyer.address,
+					nft: {
 						addressNFTToSell: sellerNFT.address,
 						tokenIdNFTToSell: i + 1,
-						tokenToBuy: buyerToken.address,
 						addressNFTToBuy: buyerNFT.address,
 						tokenIdNFTToBuy: i + 1,
-						amountOfETHToSell: parseEther('50'),
-						amountOfTokenToSell: parseEther(equalToken.toString()),
-						amountOfETHToBuy: parseEther('0'),
-						amountOfTokenToBuy: parseEther(equalToken.toString()),
-						tradePeriod: 600, // 10 mins deadline
 					},
-					{value: parseEther('50')}
-				);
+					token: {
+						tokenToSell: sellerToken.address,
+						amountOfTokenToSell: parseEther(equalToken.toString()),
+						tokenToBuy: buyerToken.address,
+						amountOfTokenToBuy: parseEther(equalToken.toString()),
+					},
+					eth: {
+						amountOfETHToSell: parseEther('50'),
+						amountOfETHToBuy: 0,
+					},
+					deadline: 600,
+					dateCreated: 0,
+					status: 0,
+				};
+				let tx = await trustMe.connect(seller).addTrade(trade, {value: parseEther('50')});
 				await tx.wait();
 			}
 			await trustMe.connect(seller).cancelTrade(0);
@@ -903,57 +1349,81 @@ describe('TrustMe', () => {
 				await txMnt.wait();
 				await sellerNFT.connect(seller).approve(trustMe.address, i + 1);
 			}
-			await trustMe.connect(seller).addTrade(
-				{
-					buyer: buyer.address,
-					tokenToSell: sellerToken.address,
+			const trade = {
+				tradeId: 0,
+				seller: ethers.constants.AddressZero,
+				buyer: buyer.address,
+				nft: {
 					addressNFTToSell: sellerNFT.address,
 					tokenIdNFTToSell: 1,
-					tokenToBuy: buyerToken.address,
 					addressNFTToBuy: buyerNFT.address,
 					tokenIdNFTToBuy: 1,
-					amountOfETHToSell: parseEther('200'),
-					amountOfTokenToSell: parseEther('100'),
-					amountOfETHToBuy: parseEther('0'),
-					amountOfTokenToBuy: parseEther('100'),
-					tradePeriod: 600, // 10 mins deadline
 				},
-				{value: parseEther('200')}
-			);
-			await trustMe.connect(seller).addTrade(
-				{
-					buyer: buyer.address,
+				token: {
 					tokenToSell: sellerToken.address,
+					amountOfTokenToSell: parseEther('100'),
+					tokenToBuy: buyerToken.address,
+					amountOfTokenToBuy: parseEther('100'),
+				},
+				eth: {
+					amountOfETHToSell: parseEther('200'),
+					amountOfETHToBuy: 0,
+				},
+				deadline: 600,
+				dateCreated: 0,
+				status: 0,
+			};
+			await trustMe.connect(seller).addTrade(trade, {value: parseEther('200')});
+			const trade2 = {
+				tradeId: 0,
+				seller: ethers.constants.AddressZero,
+				buyer: buyer.address,
+				nft: {
 					addressNFTToSell: sellerNFT.address,
 					tokenIdNFTToSell: 2,
-					tokenToBuy: buyerToken.address,
 					addressNFTToBuy: buyerNFT.address,
 					tokenIdNFTToBuy: 2,
-					amountOfETHToSell: parseEther('200'),
-					amountOfTokenToSell: parseEther('200'),
-					amountOfETHToBuy: parseEther('0'),
-					amountOfTokenToBuy: parseEther('200'),
-					tradePeriod: 600, // 10 mins deadline
 				},
-				{value: parseEther('200')}
-			);
-			await trustMe.connect(seller).addTrade(
-				{
-					buyer: buyer.address,
+				token: {
 					tokenToSell: sellerToken.address,
+					amountOfTokenToSell: parseEther('200'),
+					tokenToBuy: buyerToken.address,
+					amountOfTokenToBuy: parseEther('200'),
+				},
+				eth: {
+					amountOfETHToSell: parseEther('200'),
+					amountOfETHToBuy: 0,
+				},
+				deadline: 600,
+				dateCreated: 0,
+				status: 0,
+			};
+			await trustMe.connect(seller).addTrade(trade2, {value: parseEther('200')});
+			const trade3 = {
+				tradeId: 0,
+				seller: ethers.constants.AddressZero,
+				buyer: buyer.address,
+				nft: {
 					addressNFTToSell: sellerNFT.address,
 					tokenIdNFTToSell: 3,
-					tokenToBuy: buyerToken.address,
 					addressNFTToBuy: buyerNFT.address,
 					tokenIdNFTToBuy: 3,
-					amountOfETHToSell: parseEther('200'),
-					amountOfTokenToSell: parseEther('200'),
-					amountOfETHToBuy: parseEther('0'),
-					amountOfTokenToBuy: parseEther('200'),
-					tradePeriod: 600, // 10 mins deadline
 				},
-				{value: parseEther('200')}
-			);
+				token: {
+					tokenToSell: sellerToken.address,
+					amountOfTokenToSell: parseEther('200'),
+					tokenToBuy: buyerToken.address,
+					amountOfTokenToBuy: parseEther('200'),
+				},
+				eth: {
+					amountOfETHToSell: parseEther('200'),
+					amountOfETHToBuy: 0,
+				},
+				deadline: 600,
+				dateCreated: 0,
+				status: 0,
+			};
+			await trustMe.connect(seller).addTrade(trade3, {value: parseEther('200')});
 			const pendingTrades = await trustMe.getPendingTradesIDs();
 			await trustMe.connect(seller).cancelTrade(1);
 			const pendingTradesAfter = await trustMe.getPendingTradesIDs();
@@ -973,40 +1443,56 @@ describe('TrustMe', () => {
 				await txMnt.wait();
 				await sellerNFT.connect(seller).approve(trustMe.address, i);
 			}
-			await trustMe.connect(seller).addTrade(
-				{
-					buyer: buyer.address,
-					tokenToSell: sellerToken.address,
+			const trade = {
+				tradeId: 0,
+				seller: ethers.constants.AddressZero,
+				buyer: buyer.address,
+				nft: {
 					addressNFTToSell: sellerNFT.address,
 					tokenIdNFTToSell: 0,
-					tokenToBuy: buyerToken.address,
 					addressNFTToBuy: buyerNFT.address,
 					tokenIdNFTToBuy: 0,
-					amountOfETHToSell: parseEther('6000'),
-					amountOfTokenToSell: parseEther('100'),
-					amountOfETHToBuy: parseEther('0'),
-					amountOfTokenToBuy: parseEther('100'),
-					tradePeriod: 1800, // 30 mins deadline
 				},
-				{value: parseEther('6000')}
-			);
-			await trustMe.connect(seller).addTrade(
-				{
-					buyer: buyer.address,
+				token: {
 					tokenToSell: sellerToken.address,
+					amountOfTokenToSell: parseEther('100'),
+					tokenToBuy: buyerToken.address,
+					amountOfTokenToBuy: parseEther('100'),
+				},
+				eth: {
+					amountOfETHToSell: parseEther('6000'),
+					amountOfETHToBuy: 0,
+				},
+				deadline: 1800,
+				dateCreated: 0,
+				status: 0,
+			};
+			await trustMe.connect(seller).addTrade(trade, {value: parseEther('6000')});
+			const trade1 = {
+				tradeId: 0,
+				seller: ethers.constants.AddressZero,
+				buyer: buyer.address,
+				nft: {
 					addressNFTToSell: sellerNFT.address,
 					tokenIdNFTToSell: 1,
-					tokenToBuy: buyerToken.address,
 					addressNFTToBuy: buyerNFT.address,
 					tokenIdNFTToBuy: 1,
-					amountOfETHToSell: parseEther('3000'),
-					amountOfTokenToSell: parseEther('200'),
-					amountOfETHToBuy: parseEther('0'),
-					amountOfTokenToBuy: parseEther('200'),
-					tradePeriod: 3600, // 1 hour deadline
 				},
-				{value: parseEther('3000')}
-			);
+				token: {
+					tokenToSell: sellerToken.address,
+					amountOfTokenToSell: parseEther('200'),
+					tokenToBuy: buyerToken.address,
+					amountOfTokenToBuy: parseEther('200'),
+				},
+				eth: {
+					amountOfETHToSell: parseEther('3000'),
+					amountOfETHToBuy: 0,
+				},
+				deadline: 3600,
+				dateCreated: 0,
+				status: 0,
+			};
+			await trustMe.connect(seller).addTrade(trade1, {value: parseEther('3000')});
 			await time.increase(1801);
 			await trustMe.checkExpiredTrades();
 		});
@@ -1066,59 +1552,83 @@ describe('TrustMe', () => {
 				await txMnt.wait();
 				await sellerNFT.connect(seller).approve(trustMe.address, i + 1);
 			}
-			const tx1 = await trustMe.connect(seller).addTrade(
-				{
-					buyer: buyer.address,
-					tokenToSell: sellerToken.address,
+			const trade = {
+				tradeId: 0,
+				seller: ethers.constants.AddressZero,
+				buyer: buyer.address,
+				nft: {
 					addressNFTToSell: sellerNFT.address,
 					tokenIdNFTToSell: 1,
-					tokenToBuy: buyerToken.address,
 					addressNFTToBuy: buyerNFT.address,
 					tokenIdNFTToBuy: 1,
-					amountOfETHToSell: parseEther('200'),
-					amountOfTokenToSell: parseEther('100'),
-					amountOfETHToBuy: parseEther('0'),
-					amountOfTokenToBuy: parseEther('100'),
-					tradePeriod: 1800, // 30 mins deadline
 				},
-				{value: parseEther('200')}
-			);
-			await tx1.wait();
-			const tx2 = await trustMe.connect(seller).addTrade(
-				{
-					buyer: buyer.address,
+				token: {
 					tokenToSell: sellerToken.address,
+					amountOfTokenToSell: parseEther('100'),
+					tokenToBuy: buyerToken.address,
+					amountOfTokenToBuy: parseEther('100'),
+				},
+				eth: {
+					amountOfETHToSell: parseEther('200'),
+					amountOfETHToBuy: 0,
+				},
+				deadline: 1800,
+				dateCreated: 0,
+				status: 0,
+			};
+			const tx1 = await trustMe.connect(seller).addTrade(trade, {value: parseEther('200')});
+			await tx1.wait();
+			const trade1 = {
+				tradeId: 0,
+				seller: ethers.constants.AddressZero,
+				buyer: buyer.address,
+				nft: {
 					addressNFTToSell: sellerNFT.address,
 					tokenIdNFTToSell: 2,
-					tokenToBuy: buyerToken.address,
 					addressNFTToBuy: buyerNFT.address,
 					tokenIdNFTToBuy: 2,
-					amountOfETHToSell: parseEther('200'),
-					amountOfTokenToSell: parseEther('200'),
-					amountOfETHToBuy: parseEther('0'),
-					amountOfTokenToBuy: parseEther('200'),
-					tradePeriod: 3600, // 1 hour deadline
 				},
-				{value: parseEther('200')}
-			);
-			await tx2.wait();
-			const tx3 = await trustMe.connect(seller).addTrade(
-				{
-					buyer: buyer.address,
+				token: {
 					tokenToSell: sellerToken.address,
+					amountOfTokenToSell: parseEther('200'),
+					tokenToBuy: buyerToken.address,
+					amountOfTokenToBuy: parseEther('200'),
+				},
+				eth: {
+					amountOfETHToSell: parseEther('200'),
+					amountOfETHToBuy: 0,
+				},
+				deadline: 3600,
+				dateCreated: 0,
+				status: 0,
+			};
+			const tx2 = await trustMe.connect(seller).addTrade(trade1, {value: parseEther('200')});
+			await tx2.wait();
+			const trade2 = {
+				tradeId: 0,
+				seller: ethers.constants.AddressZero,
+				buyer: buyer.address,
+				nft: {
 					addressNFTToSell: sellerNFT.address,
 					tokenIdNFTToSell: 3,
-					tokenToBuy: buyerToken.address,
 					addressNFTToBuy: buyerNFT.address,
 					tokenIdNFTToBuy: 3,
-					amountOfETHToSell: parseEther('200'),
-					amountOfTokenToSell: parseEther('50'),
-					amountOfETHToBuy: parseEther('0'),
-					amountOfTokenToBuy: parseEther('200'),
-					tradePeriod: 600, // 10 min
 				},
-				{value: parseEther('200')}
-			);
+				token: {
+					tokenToSell: sellerToken.address,
+					amountOfTokenToSell: parseEther('50'),
+					tokenToBuy: buyerToken.address,
+					amountOfTokenToBuy: parseEther('200'),
+				},
+				eth: {
+					amountOfETHToSell: parseEther('200'),
+					amountOfETHToBuy: 0,
+				},
+				deadline: 600,
+				dateCreated: 0,
+				status: 0,
+			};
+			const tx3 = await trustMe.connect(seller).addTrade(trade2, {value: parseEther('200')});
 			await tx3.wait();
 			pendingTrades = await trustMe.getPendingTradesIDs();
 		});

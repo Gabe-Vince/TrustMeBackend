@@ -8,65 +8,12 @@ import "@openzeppelin/contracts/token/ERC721/utils/ERC721Holder.sol";
 import "@openzeppelin/contracts/utils/Counters.sol";
 import "./library/Validation.sol";
 import "./library/SecurityFunctions.sol";
-
-library TradeLib {
-	struct NFT {
-		address senderAddressNFT;
-		uint256 senderTokenIdNFT;
-		address receiverAddressNFT;
-	}
-}
+import "./library/TradeLib.sol";
 
 contract TrustMe is ERC721Holder {
 	using SafeERC20 for IERC20;
 	using Counters for Counters.Counter;
-
-	/*********
-	 * TYPES *
-	 *********/
-	enum TradeStatus {
-		Pending,
-		Confirmed,
-		Canceled,
-		Expired,
-		Withdrawn
-	}
-
-	struct Trade {
-		uint256 id;
-		address seller;
-		address buyer;
-		address tokenToSell;
-		address addressNFTToSell;
-		uint256 tokenIdNFTToSell;
-		address tokenToBuy;
-		address addressNFTToBuy;
-		uint256 tokenIdNFTToBuy;
-		uint256 amountOfETHToSell;
-		uint256 amountOfTokenToSell;
-		uint256 amountOfETHToBuy;
-		uint256 amountOfTokenToBuy;
-		uint256 deadline;
-		TradeStatus status;
-	}
-
-	// NT: added TransactionInput struct to avoid stack do deep error
-	// which occurs due to added function arguments in addTrade
-
-	struct TransactionInput {
-		address buyer;
-		address tokenToSell;
-		address addressNFTToSell;
-		uint256 tokenIdNFTToSell;
-		address tokenToBuy;
-		address addressNFTToBuy;
-		uint256 tokenIdNFTToBuy;
-		uint256 amountOfETHToSell;
-		uint256 amountOfTokenToSell;
-		uint256 amountOfETHToBuy;
-		uint256 amountOfTokenToBuy;
-		uint256 tradePeriod;
-	}
+	using TradeLib for TradeLib.Trade;
 
 	/**********************
 	 *  STATE VARIABLES *
@@ -74,147 +21,128 @@ contract TrustMe is ERC721Holder {
 
 	mapping(address => uint256[]) public userToTradesIDs;
 
-	mapping(uint256 => Trade) public tradeIDToTrade;
+	mapping(uint256 => TradeLib.Trade) public tradeIDToTrade;
 
 	Counters.Counter private _tradeId;
 
 	uint256[] public pendingTradesIDs;
 
-	// NT - is it necessary to keep track of seller token and ETH balances in contract? I have done so now for ETH;
 	mapping(uint => uint) public tradeIdToETHFromSeller;
 
 	/**********
 	 * EVENTS *
 	 **********/
-	//  I will need all data except for the status in the Trade created event only for the graph. if possible try not using a struct in the event.
-	event TradeCreated(uint tradeID, address seller, address buyer);
 
+	event TradeCreated(uint256 indexed tradeID, address indexed seller, address indexed buyer);
 	event TradeConfirmed(uint256 indexed tradeID, address indexed seller, address indexed buyer);
 	event TradeExpired(uint256 indexed tradeID, address indexed seller, address indexed buyer);
 	event TradeCanceled(uint256 indexed tradeID, address indexed seller, address indexed buyer);
 	event TradeWithdrawn(uint256 indexed tradeID, address indexed seller, address indexed buyer);
 
-	/***************
-	 * MODIFIERS *
-	 ***************/
+	function addTrade(TradeLib.Trade memory transactionInput) external payable {
+		SecurityFunctions.validateAddTrade(transactionInput, msg.value);
 
-	function addTrade(TransactionInput calldata transactionInput) external payable {
-		SecurityFunctions.validateAddTrade(
-			transactionInput.buyer,
-			transactionInput.tokenToSell,
-			transactionInput.addressNFTToSell,
-			transactionInput.tokenIdNFTToSell,
-			transactionInput.tokenToBuy,
-			transactionInput.addressNFTToBuy,
-			transactionInput.tokenIdNFTToBuy,
-			transactionInput.amountOfTokenToSell,
-			transactionInput.amountOfETHToSell,
-			transactionInput.amountOfTokenToBuy,
-			transactionInput.amountOfETHToBuy,
-			msg.value
-		);
+		// Modify the transactionInput to include the tradeId, deadline, status, msg.sender as seller and a date created attribute
+		transactionInput.tradeId = _tradeId.current();
+		transactionInput.seller = msg.sender;
+		transactionInput.status = TradeLib.TradeStatus.Pending;
+		transactionInput.deadline = block.timestamp + transactionInput.deadline;
+		transactionInput.dateCreated = block.timestamp;
 
-		uint deadline = block.timestamp + transactionInput.tradePeriod;
-		IERC20 token = IERC20(transactionInput.tokenToSell);
-		IERC721 NFTToSell = IERC721(transactionInput.addressNFTToSell);
-		if (transactionInput.amountOfTokenToSell > 0)
-			token.safeTransferFrom(msg.sender, address(this), transactionInput.amountOfTokenToSell);
-		if (transactionInput.addressNFTToSell != address(0))
-			NFTToSell.safeTransferFrom(msg.sender, address(this), transactionInput.tokenIdNFTToSell);
-
+		// Transfer the tokens and NFTs to the contract
+		IERC20 token = IERC20(transactionInput.token.tokenToSell);
+		IERC721 NFTToSell = IERC721(transactionInput.nft.addressNFTToSell);
+		if (transactionInput.token.amountOfTokenToSell > 0)
+			token.safeTransferFrom(msg.sender, address(this), transactionInput.token.amountOfTokenToSell);
+		if (transactionInput.nft.addressNFTToSell != address(0))
+			NFTToSell.safeTransferFrom(msg.sender, address(this), transactionInput.nft.tokenIdNFTToSell);
 		tradeIdToETHFromSeller[_tradeId.current()] += msg.value;
 
-		Trade memory trade = Trade(
-			_tradeId.current(),
-			msg.sender,
-			transactionInput.buyer,
-			transactionInput.tokenToSell,
-			transactionInput.addressNFTToSell,
-			transactionInput.tokenIdNFTToSell,
-			transactionInput.tokenToBuy,
-			transactionInput.addressNFTToBuy,
-			transactionInput.tokenIdNFTToBuy,
-			transactionInput.amountOfETHToSell,
-			transactionInput.amountOfTokenToSell,
-			transactionInput.amountOfETHToBuy,
-			transactionInput.amountOfTokenToBuy,
-			deadline,
-			TradeStatus.Pending
-		);
-
-		tradeIDToTrade[_tradeId.current()] = trade;
+		// Add the trade to the state variables
+		tradeIDToTrade[_tradeId.current()] = transactionInput;
 		userToTradesIDs[msg.sender].push(_tradeId.current());
 		userToTradesIDs[transactionInput.buyer].push(_tradeId.current());
 		pendingTradesIDs.push(_tradeId.current());
 
-		// emit TradeCreated(_tradeId.current(), msg.sender, transactionInput.buyer);
-		emit TradeCreated(_tradeId.current(), trade.seller, trade.buyer);
+		// emit the TradeCreated event
+		emit TradeCreated(_tradeId.current(), msg.sender, transactionInput.buyer);
+
+		// increment the tradeId
 		_tradeId.increment();
 	}
 
 	function confirmTrade(uint256 _tradeID) external payable {
-		Trade memory trade = tradeIDToTrade[_tradeID];
-		if (trade.status != TradeStatus.Pending) revert TradeIsNotPending();
+		TradeLib.Trade memory trade = tradeIDToTrade[_tradeID];
+		if (trade.status != TradeLib.TradeStatus.Pending) revert TradeIsNotPending();
 		address sender = msg.sender;
 		uint value = msg.value;
+
+		// Validate the trade
 		SecurityFunctions.validateConfirmTrade(trade, sender, value);
 
-		if (trade.amountOfTokenToBuy > 0)
-			IERC20(trade.tokenToBuy).safeTransferFrom(msg.sender, trade.seller, trade.amountOfTokenToBuy);
+		// Transfer the tokens, NFTs and ETH to the buyer and seller according to the trade
+		if (trade.token.amountOfTokenToBuy > 0)
+			IERC20(trade.token.tokenToBuy).safeTransferFrom(msg.sender, trade.seller, trade.token.amountOfTokenToBuy);
 
-		if (trade.addressNFTToBuy != address(0))
-			IERC721(trade.addressNFTToBuy).safeTransferFrom(msg.sender, trade.seller, trade.tokenIdNFTToBuy);
+		if (trade.nft.addressNFTToBuy != address(0))
+			IERC721(trade.nft.addressNFTToBuy).safeTransferFrom(msg.sender, trade.seller, trade.nft.tokenIdNFTToBuy);
 
-		if (trade.amountOfETHToBuy > 0) payable(trade.seller).transfer(msg.value);
+		if (trade.eth.amountOfETHToBuy > 0) payable(trade.seller).transfer(msg.value);
 
-		if (trade.amountOfTokenToSell > 0)
-			IERC20(trade.tokenToSell).safeTransfer(trade.buyer, trade.amountOfTokenToSell);
+		if (trade.token.amountOfTokenToSell > 0)
+			IERC20(trade.token.tokenToSell).safeTransfer(trade.buyer, trade.token.amountOfTokenToSell);
 
-		if (trade.addressNFTToSell != address(0))
-			IERC721(trade.addressNFTToSell).safeTransferFrom(address(this), trade.buyer, trade.tokenIdNFTToSell);
+		if (trade.nft.addressNFTToSell != address(0))
+			IERC721(trade.nft.addressNFTToSell).safeTransferFrom(
+				address(this),
+				trade.buyer,
+				trade.nft.tokenIdNFTToSell
+			);
 
-		if (trade.amountOfETHToSell > 0) payable(trade.buyer).transfer(trade.amountOfETHToSell);
-		tradeIdToETHFromSeller[_tradeID] -= trade.amountOfETHToSell;
+		if (trade.eth.amountOfETHToSell > 0) payable(trade.buyer).transfer(trade.eth.amountOfETHToSell);
+		tradeIdToETHFromSeller[_tradeID] -= trade.eth.amountOfETHToSell;
 
-		trade.status = TradeStatus.Confirmed;
-		removePendingTrade(getPendingTradeIndex(trade.id));
+		// Update the trade status and remove it from the pending trades
+		trade.status = TradeLib.TradeStatus.Confirmed;
+		removePendingTrade(getPendingTradeIndex(trade.tradeId));
 		tradeIDToTrade[_tradeID] = trade;
-		emit TradeConfirmed(trade.id, trade.seller, trade.buyer);
+		emit TradeConfirmed(trade.tradeId, trade.seller, trade.buyer);
 	}
 
 	function cancelTrade(uint256 _tradeID) external {
-		Trade storage trade = tradeIDToTrade[_tradeID];
+		TradeLib.Trade storage trade = tradeIDToTrade[_tradeID];
 		address sender = msg.sender;
 
-		// if (
-		// 	address(this).balance < trade.amountOfETHToSell ||
-		// 	tradeIdToETHFromSeller[_tradeID] < trade.amountOfETHToSell
-		// ) revert InsufficientBalance(); // TODO: i don't think this is needed
-
+		// Validate the trade
 		SecurityFunctions.validateCancelTrade(trade, sender);
 
-		if (trade.amountOfTokenToSell > 0)
-			IERC20(trade.tokenToSell).safeTransfer(trade.seller, trade.amountOfTokenToSell);
+		// Transfer the tokens, NFTs and ETH to the seller according to the trade
+		if (trade.token.amountOfTokenToSell > 0)
+			IERC20(trade.token.tokenToSell).safeTransfer(trade.seller, trade.token.amountOfTokenToSell);
 
-		if (trade.addressNFTToSell != address(0))
-			IERC721(trade.addressNFTToSell).safeTransferFrom(address(this), trade.seller, trade.tokenIdNFTToSell);
+		if (trade.nft.addressNFTToSell != address(0))
+			IERC721(trade.nft.addressNFTToSell).safeTransferFrom(
+				address(this),
+				trade.seller,
+				trade.nft.tokenIdNFTToSell
+			);
 
-		if (trade.amountOfETHToSell > 0) payable(trade.seller).transfer(trade.amountOfETHToSell);
-		tradeIdToETHFromSeller[_tradeID] -= trade.amountOfETHToSell;
+		if (trade.eth.amountOfETHToSell > 0) payable(trade.seller).transfer(trade.eth.amountOfETHToSell);
+		tradeIdToETHFromSeller[_tradeID] -= trade.eth.amountOfETHToSell;
 
-		trade.status = TradeStatus.Canceled;
-		removePendingTrade(getPendingTradeIndex(trade.id));
+		trade.status = TradeLib.TradeStatus.Canceled;
+		removePendingTrade(getPendingTradeIndex(trade.tradeId));
 
-		emit TradeCanceled(trade.id, trade.seller, trade.buyer);
+		emit TradeCanceled(trade.tradeId, trade.seller, trade.buyer);
 	}
 
 	function checkExpiredTrades() external {
 		for (uint i = pendingTradesIDs.length - 1; i >= 0; i--) {
-			Trade storage trade = tradeIDToTrade[pendingTradesIDs[uint(i)]];
+			TradeLib.Trade storage trade = tradeIDToTrade[pendingTradesIDs[uint(i)]];
 			if (trade.deadline <= block.timestamp) {
-				trade.status = TradeStatus.Expired;
+				trade.status = TradeLib.TradeStatus.Expired;
 				removePendingTrade(i);
-				emit TradeExpired(trade.id, trade.seller, trade.buyer);
+				emit TradeExpired(trade.tradeId, trade.seller, trade.buyer);
 				if (i == 0) break;
 			}
 		}
@@ -230,31 +158,35 @@ contract TrustMe is ERC721Holder {
 	}
 
 	function withdraw(uint256 _tradeID) external {
-		Trade storage trade = tradeIDToTrade[_tradeID];
+		TradeLib.Trade storage trade = tradeIDToTrade[_tradeID];
 		address sender = msg.sender;
 		SecurityFunctions.validateWithdraw(trade, sender);
 		if (
-			address(this).balance < trade.amountOfETHToSell ||
-			tradeIdToETHFromSeller[_tradeID] < trade.amountOfETHToSell
+			address(this).balance < trade.eth.amountOfETHToSell ||
+			tradeIdToETHFromSeller[_tradeID] < trade.eth.amountOfETHToSell
 		) revert InsufficientBalance();
 
-		if (trade.amountOfTokenToSell > 0)
-			IERC20(trade.tokenToSell).safeTransfer(trade.seller, trade.amountOfTokenToSell);
+		if (trade.token.amountOfTokenToSell > 0)
+			IERC20(trade.token.tokenToSell).safeTransfer(trade.seller, trade.token.amountOfTokenToSell);
 
-		if (trade.addressNFTToSell != address(0))
-			IERC721(trade.addressNFTToSell).safeTransferFrom(address(this), trade.seller, trade.tokenIdNFTToSell);
+		if (trade.nft.addressNFTToSell != address(0))
+			IERC721(trade.nft.addressNFTToSell).safeTransferFrom(
+				address(this),
+				trade.seller,
+				trade.nft.tokenIdNFTToSell
+			);
 
-		if (trade.amountOfETHToSell > 0) payable(trade.seller).transfer(trade.amountOfETHToSell);
-		tradeIdToETHFromSeller[_tradeID] -= trade.amountOfETHToSell;
-		trade.status = TradeStatus.Withdrawn;
-		emit TradeWithdrawn(trade.id, trade.seller, trade.buyer);
+		if (trade.eth.amountOfETHToSell > 0) payable(trade.seller).transfer(trade.eth.amountOfETHToSell);
+		tradeIdToETHFromSeller[_tradeID] -= trade.eth.amountOfETHToSell;
+		trade.status = TradeLib.TradeStatus.Withdrawn;
+		emit TradeWithdrawn(trade.tradeId, trade.seller, trade.buyer);
 	}
 
 	/***********
 	 * GETTERS *
 	 ***********/
 
-	function getTrade(uint256 _tradeID) external view returns (Trade memory) {
+	function getTrade(uint256 _tradeID) external view returns (TradeLib.Trade memory) {
 		return tradeIDToTrade[_tradeID];
 	}
 
@@ -266,7 +198,7 @@ contract TrustMe is ERC721Holder {
 		return pendingTradesIDs;
 	}
 
-	function getTradeStatus(uint256 _tradeID) external view returns (TradeStatus) {
+	function getTradeStatus(uint256 _tradeID) external view returns (TradeLib.TradeStatus) {
 		return tradeIDToTrade[_tradeID].status;
 	}
 
