@@ -16,7 +16,7 @@ const confirmTrade = async () => {
 	const approveTx = await buyerToken.connect(wallet).approve(trustMeaddress as string, parseEther('10'));
 	await approveTx.wait();
 	console.log('================================Approved================================');
-	const tx = await trustMe.connect(wallet).confirmTrade(4);
+	const tx = await trustMe.connect(wallet).confirmTrade(5);
 	console.log('Confirmed waiting for block confirmation...');
 	const receipt = await tx.wait();
 	console.log('================================Trade Confirmed================================');
