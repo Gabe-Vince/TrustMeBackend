@@ -4,16 +4,16 @@ import {BuyerToken, SellerToken, TrustMe} from '../typechain';
 
 const signer = process.env.PRIVATE_KEY;
 const trustMeaddress = process.env.TRUSTME_ADDRESS;
-const sellerTokenAddress = process.env.SELLER_TOKEN_ADDRESS;
+// const sellerTokenAddress = process.env.SELLER_TOKEN_ADDRESS;
 
 const addTrade = async () => {
 	const trustMe: TrustMe = await ethers.getContractAt('TrustMe', trustMeaddress as string);
-	const sellerToken: SellerToken = await ethers.getContractAt('SellerToken', sellerTokenAddress as string);
+	// const sellerToken: SellerToken = await ethers.getContractAt('SellerToken', sellerTokenAddress as string);
 
 	const trade = {
 		tradeId: 0,
 		seller: ethers.constants.AddressZero,
-		buyer: '0xdac418351bb0f47f3e30d3bd2f8fa7ce53dcda22',
+		buyer: '0x2306dA564868c47bb2C0123A25943cD54e6e8e2F',
 		nft: {
 			addressNFTToSell: ethers.constants.AddressZero,
 			tokenIdNFTToSell: 0,

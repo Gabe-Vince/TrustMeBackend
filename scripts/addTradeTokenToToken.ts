@@ -8,12 +8,13 @@ const sellerTokenAddress = process.env.SELLER_TOKEN_ADDRESS;
 
 const addTrade = async () => {
 	const trustMe: TrustMe = await ethers.getContractAt('TrustMe', trustMeaddress as string);
+	console.log('trustMeaddress: ', trustMeaddress);
 	const sellerToken: SellerToken = await ethers.getContractAt('SellerToken', sellerTokenAddress as string);
-
+	console.log('sellerTokenAddress: ', sellerTokenAddress);
 	const trade = {
 		tradeId: 0,
 		seller: ethers.constants.AddressZero,
-		buyer: '0xdac418351bb0f47f3e30d3bd2f8fa7ce53dcda22',
+		buyer: '0x2306dA564868c47bb2C0123A25943cD54e6e8e2F',
 		nft: {
 			addressNFTToSell: ethers.constants.AddressZero,
 			tokenIdNFTToSell: 0,
@@ -37,9 +38,12 @@ const addTrade = async () => {
 	console.log('Adding Trade...');
 	const approveTx = await sellerToken.approve(trustMeaddress as string, parseEther('10'));
 	await approveTx.wait();
+	console.log('================================Approved================================');
 	const tx = await trustMe.addTrade(trade);
+	console.log('================================Trade Added waiting for block================================');
 	const receipt = await tx.wait();
-	console.log(receipt.events);
+	console.log('================================Trade Added================================');
+	// console.log(receipt.events);
 };
 addTrade()
 	.then(() => process.exit(0))
