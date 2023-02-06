@@ -81,16 +81,17 @@ contract TrustMe is ERC721Holder {
 		SecurityFunctions.validateConfirmTrade(trade, sender, value);
 
 		// Transfer the tokens, NFTs and ETH to the buyer and seller according to the trade
-		if (trade.token.amountOfTokenToBuy > 0)
+		if (trade.token.amountOfTokenToBuy > 0) {
 			IERC20(trade.token.tokenToBuy).safeTransferFrom(msg.sender, trade.seller, trade.token.amountOfTokenToBuy);
-
-		if (trade.nft.addressNFTToBuy != address(0))
+		}
+		if (trade.nft.addressNFTToBuy != address(0)) {
 			IERC721(trade.nft.addressNFTToBuy).safeTransferFrom(msg.sender, trade.seller, trade.nft.tokenIdNFTToBuy);
-
+		}
 		if (trade.eth.amountOfETHToBuy > 0) payable(trade.seller).transfer(msg.value);
 
-		if (trade.token.amountOfTokenToSell > 0)
+		if (trade.token.amountOfTokenToSell > 0) {
 			IERC20(trade.token.tokenToSell).safeTransfer(trade.buyer, trade.token.amountOfTokenToSell);
+		}
 
 		if (trade.nft.addressNFTToSell != address(0))
 			IERC721(trade.nft.addressNFTToSell).safeTransferFrom(

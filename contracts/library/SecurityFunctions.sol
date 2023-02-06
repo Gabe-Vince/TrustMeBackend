@@ -36,11 +36,14 @@ library SecurityFunctions {
 		if (value != trade.eth.amountOfETHToSell) revert IncorrectAmoutOfETHTransferred();
 	}
 
-	function validateConfirmTrade(TradeLib.Trade memory trade, address sender, uint value) internal {
+	function validateConfirmTrade(
+		TradeLib.Trade memory trade,
+		address sender,
+		uint value
+	) internal {
 		Validation.checkBuyer(trade.buyer, sender);
 		Validation.checkDeadline(trade.deadline);
 		Validation.checkNftOwner(trade.nft.addressNFTToBuy, trade.buyer, trade.nft.tokenIdNFTToBuy);
-		Validation.checkNftApproval(trade.nft.addressNFTToBuy, address(this), trade.nft.tokenIdNFTToBuy);
 		Validation.checkNftOwner(trade.nft.addressNFTToSell, address(this), trade.nft.tokenIdNFTToSell);
 		Validation.checkEthAmount(value, trade.eth.amountOfETHToBuy);
 	}
