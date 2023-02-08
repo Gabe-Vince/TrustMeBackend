@@ -2,7 +2,7 @@
   <img src="./public/Logo.jpeg" height="200px" width="100%">
 </p>
 
-A Delivery versus Payment (DVP) contract built for the Ethereum blockchain that facilitates trustless over the counter(OTC) settlements between a buyer and a seller. The contract is written in Solidity and tests are written in Typescript.
+A Delivery versus Payment (DVP) contract built for the Ethereum blockchain that facilitates trustless over the counter(OTC) settlements between two parties. The contract is written in Solidity and tests are written in Typescript.
 The [Frontend](https://github.com/mengiefen/TrustMe-Settlements) has all the functionailty for the smart contract with a user friendly interface.
 
 The Contract is deployed on the Goerli Testnet at the following address: [0xFB0B5ec3a08c5EbD604532563eF448eBcE6BaaA4](https://goerli.etherscan.io/address/0xFB0B5ec3a08c5EbD604532563eF448eBcE6BaaA4)
