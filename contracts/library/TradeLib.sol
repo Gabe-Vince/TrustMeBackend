@@ -1,6 +1,11 @@
 // SPDX-License-Identifier: UNLICENSED
 pragma solidity ^0.8.17;
 
+/** @title TradeLib
+ * 	@notice This contract contains all the structs used in the TrustMe contract
+ *	@dev This contract is used to store the structs used in the TrustMe contract
+ */
+
 library TradeLib {
 	struct NFT {
 		address addressNFTToSell;

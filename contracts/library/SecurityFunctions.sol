@@ -3,18 +3,23 @@ pragma solidity ^0.8.17;
 import "../library/Validation.sol";
 import "../library/TradeLib.sol";
 
-import "hardhat/console.sol";
+/**  @title SecurityFunctions
+ * @notice This contract contains all the security functions used in the TrustMe contract
+ * @dev This contract is used to store the security functions used in the TrustMe contract
+ */
 
 library SecurityFunctions {
-	// check if the trade is valid
-
+	/**  @notice This validtaes the inputs of the addTrade function
+	 * @param trade The trade struct
+	 * @param value The amount of ETH sent with the transaction
+	 */
 	function validateAddTrade(TradeLib.Trade memory trade, uint value) internal {
 		Validation.checkEmptyAddress(msg.sender);
 		Validation.checkEmptyAddress(trade.buyer);
 		Validation.checkSameAddress(msg.sender, trade.buyer);
 		Validation.checkSameToken(trade.token.tokenToSell, trade.token.tokenToBuy);
-		Validation.checkTokenInput(trade.token.tokenToSell, trade.token.amountOfTokenToSell); // if no token to sell, amount should be 0
-		Validation.checkTokenInput(trade.token.tokenToBuy, trade.token.amountOfTokenToBuy); // if no token to buy, amount should be 0
+		Validation.checkTokenInput(trade.token.tokenToSell, trade.token.amountOfTokenToSell);
+		Validation.checkTokenInput(trade.token.tokenToBuy, trade.token.amountOfTokenToBuy);
 		Validation.checkNftOwner(trade.nft.addressNFTToSell, msg.sender, trade.nft.tokenIdNFTToSell);
 		Validation.checkETHToETHTrade(trade.eth.amountOfETHToSell, trade.eth.amountOfETHToBuy);
 		Validation.checkNftInputs(trade.nft.addressNFTToSell, trade.nft.addressNFTToBuy);
@@ -36,11 +41,12 @@ library SecurityFunctions {
 		if (value != trade.eth.amountOfETHToSell) revert IncorrectAmoutOfETHTransferred();
 	}
 
-	function validateConfirmTrade(
-		TradeLib.Trade memory trade,
-		address sender,
-		uint value
-	) internal {
+	/**  @notice This validtaes the inputs of the confirmTrade function
+	 * @param trade The trade struct
+	 * @param sender The address of the sender
+	 * @param value The amount of ETH sent with the transaction
+	 */
+	function validateConfirmTrade(TradeLib.Trade memory trade, address sender, uint value) internal {
 		Validation.checkBuyer(trade.buyer, sender);
 		Validation.checkDeadline(trade.deadline);
 		Validation.checkNftOwner(trade.nft.addressNFTToBuy, trade.buyer, trade.nft.tokenIdNFTToBuy);
@@ -48,17 +54,24 @@ library SecurityFunctions {
 		Validation.checkEthAmount(value, trade.eth.amountOfETHToBuy);
 	}
 
+	/** @notice This validtaes the inputs of the cancelTrade function
+	 * @param trade The trade struct
+	 * @param sender The address of the sender
+	 */
 	function validateCancelTrade(TradeLib.Trade memory trade, address sender) internal {
 		if (trade.status != TradeLib.TradeStatus.Pending) revert TradeIsNotPending();
 		Validation.checkSellerOrBuyer(trade.seller, trade.buyer, sender);
-		// Validation.checkNftOwner(trade.addressNFTToSell, sender, trade.tokenIdNFTToSell); //why this check? he will never gonna have the NFT bcoz we already transfered it to the contract in the addTrade function
+
 		Validation.checkDeadline(trade.deadline);
 	}
 
+	/** @notice This validtaes the inputs of the withdraw function
+	 * @param trade The trade struct
+	 * @param sender The address of the sender
+	 */
 	function validateWithdraw(TradeLib.Trade memory trade, address sender) internal {
 		if (trade.status != TradeLib.TradeStatus.Expired) revert TradeIsNotExpired();
 		Validation.checkTradeNotExpired(trade.deadline);
 		Validation.checkSeller(trade.seller, sender);
-		// Validation.checkNftOwner(trade.addressNFTToSell, sender, trade.tokenIdNFTToSell);
 	}
 }
