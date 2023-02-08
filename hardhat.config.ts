@@ -16,7 +16,9 @@ const ALCHEMY_GOERLI = process.env.ALCHEMY_API_KEY_GOERLI || '';
 const ALCHEMY_MAINNET = process.env.ALCHEMY_API_KEY_MAINET || '';
 
 const config: HardhatUserConfig = {
-	solidity: '0.8.17',
+	solidity: {
+		version: '0.8.17',
+	},
 	defaultNetwork: 'hardhat',
 	networks: {
 		hardhat: {
@@ -25,11 +27,11 @@ const config: HardhatUserConfig = {
 		localhost: {
 			chainId: chainIds.hardhat,
 		},
-		mainnet: {
-			url: ALCHEMY_MAINNET,
-			accounts: [process.env.PRIVATE_KEY || ''],
-			chainId: chainIds.mainnet,
-		},
+		// mainnet: {
+		// 	url: ALCHEMY_MAINNET,
+		// 	accounts: [process.env.PRIVATE_KEY || ''],
+		// 	chainId: chainIds.mainnet,
+		// },
 		goerli: {
 			url: ALCHEMY_GOERLI,
 			accounts: [process.env.PRIVATE_KEY || ''],
@@ -44,6 +46,8 @@ const config: HardhatUserConfig = {
 		alphaSort: false,
 		runOnCompile: false,
 		disambiguatePaths: false,
+		strict: true,
+		only: [':TrustMe$', ':SecurityFunctions$', ':Validation$'],
 	},
 	gasReporter: {
 		enabled: process.env.REPORT_GAS == 'true' ?? false,
