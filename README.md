@@ -14,8 +14,6 @@ The Contract is deployed on the Goerli Testnet at the following address: [0xFB0B
 -   [Security Considerations](#security-considerations)
 -   [Challenges and Future Features](#challenges-and-future-features)
 -   [Functions](#functions)
--   [Support](#Support)
--
 
 ## Overview
 
