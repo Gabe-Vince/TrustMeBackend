@@ -53,6 +53,3 @@ The TrustMe contract has been thoroughly tested and is considered secure for nor
 -   `withdraw`: allows the buyer to withdraw from a trade that has been confirmed or has expired.
 -   `checkExpiredTrade`: will set the status to trades who's deadline has been passed as Expired. This function will not be called manually but instead be registered as a Time-Based Chainlink UpKeep.
 
-## Types
-
--   `Trade`
