@@ -180,17 +180,16 @@ contract TrustMe is ERC721Holder {
 
 	function checkExpiredTrades() external {
 		// Iterate over the pending trades and check if they are expired
-		for (uint i = pendingTradesIDs.length - 1; i >= 0; i--) {
-			TradeLib.Trade storage trade = tradeIDToTrade[pendingTradesIDs[uint(i)]];
+		for (uint i = pendingTradesIDs.length; i > 0; i--) {
+			TradeLib.Trade storage trade = tradeIDToTrade[pendingTradesIDs[i - 1]];
 			if (trade.deadline <= block.timestamp) {
 				trade.status = TradeLib.TradeStatus.Expired;
 
 				// Remove the trade from the pending trades
-				removePendingTrade(i);
+				removePendingTrade(i - 1);
 
 				// Emit the TradeExpired event
 				emit TradeExpired(trade.tradeId, trade.seller, trade.buyer);
-				if (i == 0) break;
 			}
 		}
 	}
@@ -202,10 +201,7 @@ contract TrustMe is ERC721Holder {
 	 */
 	function removePendingTrade(uint256 index) internal {
 		if (index >= pendingTradesIDs.length) return;
-
-		for (uint i = index; i < pendingTradesIDs.length - 1; i++) {
-			pendingTradesIDs[i] = pendingTradesIDs[i + 1];
-		}
+		pendingTradesIDs[index] = pendingTradesIDs[pendingTradesIDs.length - 1];
 		pendingTradesIDs.pop();
 	}
 
