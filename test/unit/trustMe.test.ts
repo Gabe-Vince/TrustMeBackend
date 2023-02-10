@@ -3,9 +3,8 @@ import {expect} from 'chai';
 import {Signer} from 'ethers';
 import {formatEther, getContractAddress, id, parseEther} from 'ethers/lib/utils';
 import {deployments, ethers} from 'hardhat';
-import {BuyerToken, SellerToken, BuyerNFT, SellerNFT, TrustMe} from '../../typechain/contracts';
+import {BuyerToken, SellerToken, TrustMe, BuyerNFT, SellerNFT} from '../../typechain';
 import {time} from '@nomicfoundation/hardhat-network-helpers';
-import {log} from 'console';
 describe('TrustMe', () => {
 	let signers: SignerWithAddress[];
 	let trustMe: TrustMe;
@@ -1179,7 +1178,7 @@ describe('TrustMe', () => {
 				const tx = await buyerToken.connect(buyer).approve(trustMe.address, parseEther('100'));
 				await tx.wait();
 				await expect(trustMe.connect(buyer).confirmTrade(0)).to.be.revertedWith(
-					'ERC721: caller is not token owner or approved'
+					'ERC20: insufficient allowance'
 				);
 			});
 
@@ -1881,6 +1880,7 @@ describe('TrustMe', () => {
 			};
 			const tx3 = await trustMe.connect(seller).addTrade(trade2, {value: parseEther('200')});
 			await tx3.wait();
+
 			pendingTrades = await trustMe.getPendingTradesIDs();
 		});
 		it('Should change trade.status to expired if deadline has expired', async () => {
